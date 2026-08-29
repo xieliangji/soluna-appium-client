@@ -122,7 +122,7 @@ func (s *Session) setTimeout(
 	operation string,
 	request any,
 ) error {
-	client, err := s.timeoutCommandClient(operation)
+	client, err := s.commandClient(operation)
 	if err != nil {
 		return err
 	}
@@ -152,43 +152,6 @@ func (s *Session) setTimeout(
 		client.limits.MaxResponseBytes,
 		decodeNullResponse,
 	)
-}
-
-// timeoutCommandClient 校验 Session 是否允许执行 Timeout 命令。
-func (s *Session) timeoutCommandClient(
-	operation string,
-) (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: operation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
 }
 
 // timeoutMilliseconds 将 Go Duration 转换为 WebDriver 使用的整数毫秒。
