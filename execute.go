@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"time"
 	"unicode/utf8"
 
@@ -19,6 +20,122 @@ const truncatedRemoteDataJSON = `{"truncated":true}`
 // decoder 返回错误时，该命令整体视为失败。
 // decoder 应在处理较大响应时检查 context 状态。
 type responseDecoder func(context.Context, json.RawMessage) error
+
+const executeScriptOperation = "execute_script"
+
+// ExecuteScript 在当前 Session 中执行同步 WebDriver Script。
+//
+// script 和 arguments 按照 W3C Execute Script 协议原样发送。
+// 返回值保留为 json.RawMessage，由调用方根据具体命令语义继续解码。
+//
+// Appium Driver 的 mobile: execute method 同样通过该接口执行。
+func (s *Session) ExecuteScript(
+	ctx context.Context,
+	script string,
+	arguments []any,
+) (json.RawMessage, error) {
+	client, err := s.executeScriptClient()
+	if err != nil {
+		return nil, err
+	}
+
+	command, err := wire.NewCommand(
+		executeScriptOperation,
+		http.MethodPost,
+		"session",
+		s.id,
+		"execute",
+		"sync",
+	)
+	if err != nil {
+		return nil, &Error{
+			Code:      CodeInvalidConfig,
+			Operation: executeScriptOperation,
+			Message:   "execute script command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	// W3C 协议要求 args 必须是数组。
+	// nil 在 Go 中需要显式转换为空 slice，避免编码成 JSON null。
+	if arguments == nil {
+		arguments = []any{}
+	}
+
+	request := struct {
+		Script string `json:"script"`
+		Args   []any  `json:"args"`
+	}{
+		Script: script,
+		Args:   arguments,
+	}
+
+	var result json.RawMessage
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		request,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+
+			result = append(
+				json.RawMessage(nil),
+				value...,
+			)
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+// executeScriptClient 校验 Session 是否允许执行脚本命令。
+func (s *Session) executeScriptClient() (*Client, error) {
+	if s == nil ||
+		s.client == nil ||
+		s.state == nil ||
+		s.id == "" {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: executeScriptOperation,
+			Message:   "session is not initialized",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	if !s.usable {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: executeScriptOperation,
+			Message:   "session is not usable for commands",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	if s.state.closed.Load() {
+		return nil, &Error{
+			Code:      CodeSessionLost,
+			Operation: executeScriptOperation,
+			Message:   "session is closed",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	return s.client, nil
+}
 
 // executeCommand 执行一条 WebDriver/Appium 远端命令。
 //
