@@ -18,11 +18,6 @@ import (
 // Appium 3 当前官方协议：POST /session 成功值是 {sessionId, capabilities}，DELETE /session/:sessionId 成功值是 null。
 
 const (
-	AutomationNameXCUITest     = "XCUITest"
-	AutomationNameUiAutomator2 = "UiAutomator2"
-)
-
-const (
 	createSessionOperation  = "create_session"
 	deleteSessionOperation  = "delete_session"
 	cleanupSessionOperation = "cleanup_session"
