@@ -49,9 +49,7 @@ func NewEndpoint(rawURL string) (*Endpoint, error) {
 
 	parsed.Scheme = scheme
 
-	return &Endpoint{
-		base: *parsed,
-	}, nil
+	return &Endpoint{base: *parsed}, nil
 }
 
 // URL 根据路径段构造完整的命令 URL。
