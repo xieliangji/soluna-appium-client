@@ -7,27 +7,38 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/xieliangji/soluna-appium-client/internal/codec"
 	"github.com/xieliangji/soluna-appium-client/internal/redact"
 	"github.com/xieliangji/soluna-appium-client/internal/wire"
 )
 
 const truncatedRemoteDataJSON = `{"truncated":true}`
 
+// responseDecoder 负责校验并解码具体命令返回的 value。
+//
+// decoder 返回错误时，该命令整体视为失败。
+// decoder 应在处理较大响应时检查 context 状态。
+type responseDecoder func(context.Context, json.RawMessage) error
+
 // executeCommand 执行一条 WebDriver/Appium 远端命令。
 //
 // payload 为 nil 时不发送请求体；否则会先编码为 JSON。
-// timeout 只约束远端命令执行阶段，不包含请求参数的 JSON 编码时间。
+// timeout 只约束远端命令执行阶段，不包含请求参数编码和响应值解码时间。
+//
+// decoder 必须负责校验具体命令返回的 value。
+// 只有 Transport 和 decoder 均成功时，该命令才视为成功。
 func (c *Client) executeCommand(
 	ctx context.Context,
 	command wire.Command,
 	payload any,
 	timeout time.Duration,
 	responseLimit int64,
-) (json.RawMessage, error) {
+	decoder responseDecoder,
+) (resultErr error) {
 	operation := command.Operation()
 
 	if c == nil || c.transport == nil {
-		return nil, &Error{
+		return &Error{
 			Code:      CodeInvalidConfig,
 			Operation: operation,
 			Message:   "client is not initialized",
@@ -35,7 +46,7 @@ func (c *Client) executeCommand(
 		}
 	}
 	if operation == "" || command.Method() == "" {
-		return nil, &Error{
+		return &Error{
 			Code:      CodeInvalidConfig,
 			Operation: operation,
 			Message:   "command definition is invalid",
@@ -43,7 +54,7 @@ func (c *Client) executeCommand(
 		}
 	}
 	if ctx == nil {
-		return nil, &Error{
+		return &Error{
 			Code:      CodeInvalidArgument,
 			Operation: operation,
 			Message:   "context is nil",
@@ -51,7 +62,7 @@ func (c *Client) executeCommand(
 		}
 	}
 	if timeout <= 0 {
-		return nil, &Error{
+		return &Error{
 			Code:      CodeInvalidConfig,
 			Operation: operation,
 			Message:   "command timeout must be positive",
@@ -59,16 +70,24 @@ func (c *Client) executeCommand(
 		}
 	}
 	if responseLimit <= 0 {
-		return nil, &Error{
+		return &Error{
 			Code:      CodeInvalidConfig,
 			Operation: operation,
 			Message:   "response limit must be positive",
 			Delivery:  DeliveryNotSent,
 		}
 	}
+	if decoder == nil {
+		return &Error{
+			Code:      CodeInvalidConfig,
+			Operation: operation,
+			Message:   "response decoder is nil",
+			Delivery:  DeliveryNotSent,
+		}
+	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, contextExecutionError(
+		return contextExecutionError(
 			operation,
 			0,
 			DeliveryNotSent,
@@ -82,7 +101,7 @@ func (c *Client) executeCommand(
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
 		if err != nil {
-			return nil, &Error{
+			return &Error{
 				Code:      CodeInvalidArgument,
 				Operation: operation,
 				Message:   "request payload cannot be encoded as JSON",
@@ -94,7 +113,7 @@ func (c *Client) executeCommand(
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, contextExecutionError(
+		return contextExecutionError(
 			operation,
 			0,
 			DeliveryNotSent,
@@ -113,6 +132,17 @@ func (c *Client) executeCommand(
 		})
 	}
 
+	var response wire.Response
+
+	defer func() {
+		c.observeCommandFinished(
+			operation,
+			startedAt,
+			response,
+			resultErr,
+		)
+	}()
+
 	commandCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
@@ -123,31 +153,40 @@ func (c *Client) executeCommand(
 		responseLimit,
 	)
 
-	if executeErr == nil {
-		c.observeCommandFinished(
+	if executeErr != nil {
+		resultErr = c.mapWireFailure(
+			commandCtx,
 			operation,
-			startedAt,
 			response,
-			nil,
+			executeErr,
 		)
-		return response.Value, nil
+		cancel()
+		return resultErr
 	}
 
-	clientErr := c.mapWireFailure(
-		commandCtx,
-		operation,
-		response,
-		executeErr,
-	)
+	cancel()
 
-	c.observeCommandFinished(
-		operation,
-		startedAt,
-		response,
-		clientErr,
-	)
+	if err := ctx.Err(); err != nil {
+		resultErr = contextExecutionError(
+			operation,
+			response.StatusCode,
+			DeliveryAcknowledged,
+			err,
+			err,
+		)
+		return resultErr
+	}
 
-	return nil, clientErr
+	if err := decoder(ctx, response.Value); err != nil {
+		resultErr = mapResponseDecodeFailure(
+			operation,
+			response,
+			err,
+		)
+		return resultErr
+	}
+
+	return nil
 }
 
 // mapWireFailure 将 wire 层错误映射为客户端公开错误。
@@ -237,6 +276,45 @@ func (c *Client) mapWireFailure(
 			Message:    "unknown wire failure",
 			StatusCode: response.StatusCode,
 			Delivery:   delivery,
+			Cause:      err,
+		}
+	}
+}
+
+// mapResponseDecodeFailure 将命令级响应解码错误映射为公开错误。
+func mapResponseDecodeFailure(
+	operation string,
+	response wire.Response,
+	err error,
+) error {
+	switch {
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
+		return contextExecutionError(
+			operation,
+			response.StatusCode,
+			DeliveryAcknowledged,
+			err,
+			err,
+		)
+
+	case errors.Is(err, codec.ErrBase64TooLarge):
+		return &Error{
+			Code:       CodeResponseTooLarge,
+			Operation:  operation,
+			Message:    "WebDriver response value exceeds configured limit",
+			StatusCode: response.StatusCode,
+			Delivery:   DeliveryAcknowledged,
+			Cause:      err,
+		}
+
+	default:
+		return &Error{
+			Code:       CodeResponseInvalid,
+			Operation:  operation,
+			Message:    "WebDriver response value is invalid",
+			StatusCode: response.StatusCode,
+			Delivery:   DeliveryAcknowledged,
 			Cause:      err,
 		}
 	}
