@@ -38,7 +38,9 @@ func (s *Session) Find(
 	ctx context.Context,
 	locator Locator,
 ) (*Element, error) {
-	client, err := s.findElementClient()
+	client, err := s.commandClient(
+		findElementOperation,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -378,41 +380,6 @@ func (e *Element) SendKeys(
 	)
 }
 
-// findElementClient 校验 Session 是否允许执行元素查找命令。
-func (s *Session) findElementClient() (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: findElementOperation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: findElementOperation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: findElementOperation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
-}
-
 // commandContext 校验 Element 及其所属 Session 是否可用于远端命令。
 func (e *Element) commandContext(
 	operation string,
@@ -428,38 +395,12 @@ func (e *Element) commandContext(
 		}
 	}
 
-	session := e.session
-
-	if session.client == nil ||
-		session.state == nil ||
-		session.id == "" {
-		return nil, nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "element session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
+	client, err := e.session.commandClient(operation)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	if !session.usable {
-		return nil, nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "element session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if session.state.closed.Load() {
-		return nil, nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: operation,
-			Message:   "element session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return session, session.client, nil
+	return e.session, client, nil
 }
 
 // decodeElementReference 严格解码 W3C Element Reference。
@@ -529,7 +470,7 @@ func decodeRect(
 
 	if err := json.Unmarshal(value, &payload); err != nil {
 		return Rect{}, fmt.Errorf(
-			"decode element rect: %w",
+			"decode WebDriver rect: %w",
 			err,
 		)
 	}
@@ -539,13 +480,13 @@ func decodeRect(
 		payload.Width == nil ||
 		payload.Height == nil {
 		return Rect{}, errors.New(
-			"element rect response is incomplete",
+			"webdriver rect response is incomplete",
 		)
 	}
 
 	if *payload.Width < 0 || *payload.Height < 0 {
 		return Rect{}, errors.New(
-			"element rect contains negative size",
+			"webdriver rect contains negative size",
 		)
 	}
 
