@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 
 	"github.com/xieliangji/soluna-appium-client/internal/codec"
@@ -18,7 +19,7 @@ const (
 	getElementRectOperation      = "get_element_rect"
 	getElementTextOperation      = "get_element_text"
 	getElementAttributeOperation = "get_element_attribute"
-	clickElementOperation        = "click_element"
+	tapElementOperation          = "tap_element"
 	clearElementOperation        = "clear_element"
 	sendKeysOperation            = "send_keys"
 )
@@ -393,44 +394,89 @@ func (e *Element) Attribute(
 	return value, exists, nil
 }
 
-// Click 点击当前元素。
+// Tap 点击元素当前位于 Window 内的几何交集区域中心。
 //
-// Click 是有副作用的远端命令。
-// 客户端不会在传输失败或投递状态不确定时自动重试。
-func (e *Element) Click(
+// 点击位置由客户端根据当前 Window Rect 和 Element Rect 确定，
+// 不使用 WebDriver Element Click 的 Driver 侧点击位置计算。
+//
+// Tap 不保证目标位置没有被其他元素遮挡，也不表示元素视觉上可见或可交互。
+func (e *Element) Tap(
 	ctx context.Context,
 ) error {
-	session, client, err := e.commandContext(
-		clickElementOperation,
+	return e.TapInWindowIntersection(
+		ctx,
+		0.5,
+		0.5,
+	)
+}
+
+// TapInWindowIntersection 在元素与当前 Window 的几何交集区域内按比例点击。
+//
+// xRatio 和 yRatio 分别表示交集区域水平方向和垂直方向的位置，
+// 有效范围均为 [0, 1]。
+// 0 表示最靠近起始边界的可用整数坐标，1 表示最靠近结束边界的可用整数坐标。
+//
+// 客户端只会发送严格位于 Element Rect 与 Window Rect
+// 正面积交集内部的整数 viewport 坐标。
+//
+// 如果两者没有正面积交集，或者交集内不存在可表示的整数 viewport 坐标，
+// 本方法不会发送 Tap。
+func (e *Element) TapInWindowIntersection(
+	ctx context.Context,
+	xRatio float64,
+	yRatio float64,
+) error {
+	session, _, err := e.commandContext(
+		tapElementOperation,
 	)
 	if err != nil {
 		return err
 	}
 
-	command, err := wire.NewCommand(
-		clickElementOperation,
-		http.MethodPost,
-		"session",
-		session.id,
-		"element",
-		e.id,
-		"click",
-	)
-	if err != nil {
-		return commandDefinitionError(
-			clickElementOperation,
-			"click element command definition is invalid",
-			err,
+	if !validTapRatio(xRatio) ||
+		!validTapRatio(yRatio) {
+		return elementTapArgumentError(
+			"tap ratios must be finite values in [0, 1]",
 		)
 	}
 
-	return client.executeCommand(
+	// Window 通常比元素位置稳定，因此先获取 Window，
+	// 再获取更容易随 UI 变化的 Element Rect，
+	// 尽量缩短 Element Rect 快照与实际 Tap 之间的时间。
+	windowRect, err := session.WindowRect(ctx)
+	if err != nil {
+		return err
+	}
+
+	elementRect, err := e.Rect(ctx)
+	if err != nil {
+		return err
+	}
+
+	intersection, ok := intersectRects(
+		elementRect,
+		windowRect,
+	)
+	if !ok {
+		return elementTapArgumentError(
+			"element does not intersect current window",
+		)
+	}
+
+	point, ok := pointInRectByRatio(
+		intersection,
+		xRatio,
+		yRatio,
+	)
+	if !ok {
+		return elementTapArgumentError(
+			"element and window intersection does not contain an integer viewport point",
+		)
+	}
+
+	return session.Tap(
 		ctx,
-		command,
-		struct{}{},
-		client.commandTimeout,
-		client.limits.MaxResponseBytes,
-		decodeNullResponse,
+		point,
 	)
 }
 
@@ -515,6 +561,113 @@ func (e *Element) SendKeys(
 		client.limits.MaxResponseBytes,
 		decodeNullResponse,
 	)
+}
+
+// validTapRatio 判断点击比例是否为有限的 [0, 1] 数值。
+func validTapRatio(value float64) bool {
+	return !math.IsNaN(value) &&
+		!math.IsInf(value, 0) &&
+		value >= 0 &&
+		value <= 1
+}
+
+// intersectRects 返回两个 Rect 的正面积交集。
+func intersectRects(
+	first Rect,
+	second Rect,
+) (Rect, bool) {
+	left := math.Max(
+		first.X,
+		second.X,
+	)
+	top := math.Max(
+		first.Y,
+		second.Y,
+	)
+	right := math.Min(
+		first.X+first.Width,
+		second.X+second.Width,
+	)
+	bottom := math.Min(
+		first.Y+first.Height,
+		second.Y+second.Height,
+	)
+
+	// 使用否定形式同时拒绝 NaN 和零面积交集。
+	if !(right > left) ||
+		!(bottom > top) {
+		return Rect{}, false
+	}
+
+	return Rect{
+		X:      left,
+		Y:      top,
+		Width:  right - left,
+		Height: bottom - top,
+	}, true
+}
+
+// pointInRectByRatio 在 Rect 内部选择一个确定的整数坐标。
+//
+// Rect 使用连续坐标，而 W3C Actions 当前使用整数 Point。
+// 因此先求严格位于 Rect 半开区间 [start, end) 内的整数坐标范围，
+// 再把比例位置映射并限制到该范围。
+func pointInRectByRatio(
+	rect Rect,
+	xRatio float64,
+	yRatio float64,
+) (Point, bool) {
+	minX := math.Ceil(rect.X)
+	maxX := math.Ceil(rect.X+rect.Width) - 1
+
+	minY := math.Ceil(rect.Y)
+	maxY := math.Ceil(rect.Y+rect.Height) - 1
+
+	if minX > maxX ||
+		minY > maxY {
+		return Point{}, false
+	}
+
+	// Point 使用 int，拒绝无法安全表示的异常远端坐标。
+	if minX <= float64(math.MinInt) ||
+		maxX >= float64(math.MaxInt) ||
+		minY <= float64(math.MinInt) ||
+		maxY >= float64(math.MaxInt) {
+		return Point{}, false
+	}
+
+	x := math.Round(
+		rect.X + rect.Width*xRatio,
+	)
+	y := math.Round(
+		rect.Y + rect.Height*yRatio,
+	)
+
+	x = math.Max(
+		minX,
+		math.Min(maxX, x),
+	)
+	y = math.Max(
+		minY,
+		math.Min(maxY, y),
+	)
+
+	return Point{
+		X: int(x),
+		Y: int(y),
+	}, true
+}
+
+// elementTapArgumentError 创建元素几何点击参数或前置条件错误。
+func elementTapArgumentError(
+	message string,
+) error {
+	return &Error{
+		Code:      CodeInvalidArgument,
+		Operation: tapElementOperation,
+		Message:   message,
+		Delivery:  DeliveryNotSent,
+	}
 }
 
 // commandContext 校验 Element 及其所属 Session 是否可用于远端命令。
