@@ -114,7 +114,7 @@ func (s *Session) PerformActions(
 // 正常完成且已经包含 TouchUp 的动作序列通常不需要显式调用。
 // 该方法主要用于调用方主动构造未释放输入源的低层动作场景。
 func (s *Session) ReleaseActions(ctx context.Context) error {
-	client, err := s.actionCommandClient(
+	client, err := s.commandClient(
 		releaseActionsOperation,
 	)
 	if err != nil {
@@ -220,7 +220,7 @@ func (s *Session) performActions(
 	operation string,
 	sequences []ActionSequence,
 ) error {
-	client, err := s.actionCommandClient(operation)
+	client, err := s.commandClient(operation)
 	if err != nil {
 		return err
 	}
@@ -256,43 +256,6 @@ func (s *Session) performActions(
 		client.limits.MaxResponseBytes,
 		decodeNullResponse,
 	)
-}
-
-// actionCommandClient 校验 Session 是否允许执行 Actions 命令。
-func (s *Session) actionCommandClient(
-	operation string,
-) (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: operation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
 }
 
 // actionRequest 表示 Perform Actions 的 W3C 请求体。
