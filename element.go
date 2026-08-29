@@ -33,7 +33,11 @@ type Element struct {
 	id      string
 }
 
-// Find 查找当前 Session 中第一个匹配 Locator 的元素。
+// Find 查找当前 Window 中第一个匹配 Locator 的元素。
+//
+// 底层会获取结构树中全部匹配元素，并按照远端返回顺序检查其 Rect。
+// 只有 Element Rect 与当前 Window Rect 存在正面积交集时，
+// 该元素才会被视为 Find 的有效结果。
 //
 // Locator Strategy 会按照调用方提供的协议值原样发送，
 // 客户端不会执行别名转换或自动规范化。
@@ -41,91 +45,113 @@ func (s *Session) Find(
 	ctx context.Context,
 	locator Locator,
 ) (*Element, error) {
-	client, err := s.commandClient(
-		findElementOperation,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if locator.Strategy == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: findElementOperation,
-			Message:   "locator strategy is empty",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	command, err := wire.NewCommand(
-		findElementOperation,
-		http.MethodPost,
-		"session",
-		s.id,
-		"element",
-	)
-	if err != nil {
-		return nil, &Error{
-			Code:      CodeInvalidConfig,
-			Operation: findElementOperation,
-			Message:   "find element command definition is invalid",
-			Delivery:  DeliveryNotSent,
-			Cause:     err,
-		}
-	}
-
-	request := struct {
-		Using string `json:"using"`
-		Value string `json:"value"`
-	}{
-		Using: string(locator.Strategy),
-		Value: locator.Value,
-	}
-
-	var elementID string
-
-	err = client.executeCommand(
+	candidates, err := s.findElementCandidates(
 		ctx,
-		command,
-		request,
-		client.commandTimeout,
-		client.limits.MaxResponseBytes,
-		func(
-			ctx context.Context,
-			value json.RawMessage,
-		) error {
-			id, decodeErr := decodeElementReference(ctx, value)
-			if decodeErr != nil {
-				return decodeErr
-			}
-
-			elementID = id
-			return nil
-		},
+		findElementOperation,
+		locator,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Element{
-		session: s,
-		id:      elementID,
-	}, nil
+	if len(candidates) == 0 {
+		return nil, elementNotFoundInWindowError(
+			findElementOperation,
+		)
+	}
+
+	windowRect, err := s.WindowRect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, element := range candidates {
+		rect, err := element.Rect(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := intersectRects(
+			rect,
+			windowRect,
+		); ok {
+			return element, nil
+		}
+	}
+
+	return nil, elementNotFoundInWindowError(
+		findElementOperation,
+	)
 }
 
-// FindElements 查找当前 Session 中全部匹配 Locator 的元素。
+// FindElements 查找当前 Window 中全部匹配 Locator 的元素。
+//
+// 底层会获取结构树中全部匹配元素，并保持远端返回顺序。
+// 只有 Element Rect 与当前 Window Rect 存在正面积交集的元素
+// 才会包含在最终结果中。
 //
 // Locator Strategy 会按照调用方提供的协议值原样发送，
 // 客户端不会执行别名转换或自动规范化。
 //
-// 没有匹配元素时返回空 slice 和 nil error。
+// 没有有效元素时返回非 nil 空 slice 和 nil error。
 func (s *Session) FindElements(
 	ctx context.Context,
 	locator Locator,
 ) ([]*Element, error) {
-	client, err := s.commandClient(
+	candidates, err := s.findElementCandidates(
+		ctx,
 		findElementsOperation,
+		locator,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(candidates) == 0 {
+		return candidates, nil
+	}
+
+	windowRect, err := s.WindowRect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	elements := make(
+		[]*Element,
+		0,
+		len(candidates),
+	)
+
+	for _, element := range candidates {
+		rect, err := element.Rect(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := intersectRects(
+			rect,
+			windowRect,
+		); ok {
+			elements = append(
+				elements,
+				element,
+			)
+		}
+	}
+
+	return elements, nil
+}
+
+// findElementCandidates 获取结构树中全部匹配 Locator 的元素候选。
+//
+// 本方法只负责 WebDriver 元素查找和引用解码，
+// 不判断元素是否位于当前 Window 内。
+func (s *Session) findElementCandidates(
+	ctx context.Context,
+	operation string,
+	locator Locator,
+) ([]*Element, error) {
+	client, err := s.commandClient(operation)
 	if err != nil {
 		return nil, err
 	}
@@ -133,27 +159,25 @@ func (s *Session) FindElements(
 	if locator.Strategy == "" {
 		return nil, &Error{
 			Code:      CodeInvalidArgument,
-			Operation: findElementsOperation,
+			Operation: operation,
 			Message:   "locator strategy is empty",
 			Delivery:  DeliveryNotSent,
 		}
 	}
 
 	command, err := wire.NewCommand(
-		findElementsOperation,
+		operation,
 		http.MethodPost,
 		"session",
 		s.id,
 		"elements",
 	)
 	if err != nil {
-		return nil, &Error{
-			Code:      CodeInvalidConfig,
-			Operation: findElementsOperation,
-			Message:   "find elements command definition is invalid",
-			Delivery:  DeliveryNotSent,
-			Cause:     err,
-		}
+		return nil, commandDefinitionError(
+			operation,
+			"find element candidates command definition is invalid",
+			err,
+		)
 	}
 
 	request := struct {
@@ -205,6 +229,21 @@ func (s *Session) FindElements(
 	}
 
 	return elements, nil
+}
+
+// elementNotFoundInWindowError 表示没有匹配元素处于当前 Window 几何范围内。
+//
+// 到达该结果前，候选查询已经获得远端响应，
+// 因此 Delivery 为 Acknowledged。
+func elementNotFoundInWindowError(
+	operation string,
+) error {
+	return &Error{
+		Code:      CodeElementNotFound,
+		Operation: operation,
+		Message:   "no matching element intersects current window",
+		Delivery:  DeliveryAcknowledged,
+	}
 }
 
 // ID 返回远端 WebDriver Element ID。
