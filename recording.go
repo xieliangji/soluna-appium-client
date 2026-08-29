@@ -37,7 +37,7 @@ func (s *Session) StartRecording(
 	ctx context.Context,
 	options RecordingOptions,
 ) error {
-	client, err := s.recordingCommandClient(
+	client, err := s.commandClient(
 		startRecordingOperation,
 	)
 	if err != nil {
@@ -124,7 +124,7 @@ func (s *Session) StopRecordingTo(
 	ctx context.Context,
 	dst io.Writer,
 ) (int64, error) {
-	client, err := s.recordingCommandClient(
+	client, err := s.commandClient(
 		stopRecordingOperation,
 	)
 	if err != nil {
@@ -233,41 +233,4 @@ func encodeRecordingOptions(
 	return recordingRequestOptions{
 		TimeLimit: &seconds,
 	}, nil
-}
-
-// recordingCommandClient 校验 Session 是否允许执行录屏命令。
-func (s *Session) recordingCommandClient(
-	operation string,
-) (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: operation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
 }
