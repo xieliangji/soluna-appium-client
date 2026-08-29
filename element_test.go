@@ -30,14 +30,6 @@ func TestElementCommands(t *testing.T) {
 						),
 					)
 
-				case request.Method == http.MethodPost &&
-					request.RequestURI == "/session/session%2Fid/element":
-					_, _ = writer.Write(
-						[]byte(
-							`{"value":{"element-6066-11e4-a52e-4f735466cecf":"element/id"}}`,
-						),
-					)
-
 				case request.Method == http.MethodGet &&
 					request.RequestURI == "/session/session%2Fid/element/element%2Fid/text":
 					_, _ = writer.Write(
