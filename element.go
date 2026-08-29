@@ -154,7 +154,7 @@ func (e *Element) Rect(ctx context.Context) (Rect, error) {
 			ctx context.Context,
 			value json.RawMessage,
 		) error {
-			decoded, decodeErr := decodeElementRect(ctx, value)
+			decoded, decodeErr := decodeRect(ctx, value)
 			if decodeErr != nil {
 				return decodeErr
 			}
@@ -511,8 +511,8 @@ func decodeElementReference(
 	return elementID, nil
 }
 
-// decodeElementRect 严格解码元素 Rect。
-func decodeElementRect(
+// decodeRect 严格解码元素 Rect。
+func decodeRect(
 	ctx context.Context,
 	value json.RawMessage,
 ) (Rect, error) {

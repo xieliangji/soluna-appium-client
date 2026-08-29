@@ -21,6 +21,10 @@ const (
 	createSessionOperation  = "create_session"
 	deleteSessionOperation  = "delete_session"
 	cleanupSessionOperation = "cleanup_session"
+
+	getWindowRectOperation = "get_window_rect"
+	screenshotOperation    = "screenshot"
+	pageSourceOperation    = "page_source"
 )
 
 // Session 表示一次远端 WebDriver 物理会话.
@@ -167,6 +171,202 @@ func (s *Session) Capabilities() Capabilities {
 	return cloneCapabilities(s.capabilities)
 }
 
+// WindowRect 获取当前 Session 的 WebDriver Window Rect。
+//
+// 返回的是 WebDriver viewport/window 坐标语义，
+// 不保证与截图像素坐标一一对应。
+func (s *Session) WindowRect(
+	ctx context.Context,
+) (Rect, error) {
+	client, err := s.commandClient(
+		getWindowRectOperation,
+	)
+	if err != nil {
+		return Rect{}, err
+	}
+
+	command, err := wire.NewCommand(
+		getWindowRectOperation,
+		http.MethodGet,
+		"session",
+		s.id,
+		"window",
+		"rect",
+	)
+	if err != nil {
+		return Rect{}, &Error{
+			Code:      CodeInvalidConfig,
+			Operation: getWindowRectOperation,
+			Message:   "get window rect command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	var rect Rect
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		nil,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			decoded, decodeErr := decodeRect(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			rect = decoded
+			return nil
+		},
+	)
+	if err != nil {
+		return Rect{}, err
+	}
+
+	return rect, nil
+}
+
+// Screenshot 获取当前 Session 的屏幕截图。
+//
+// 返回值为解码后的 PNG 字节数据。
+// 客户端不会对截图尺寸或像素坐标语义进行额外转换。
+func (s *Session) Screenshot(
+	ctx context.Context,
+) ([]byte, error) {
+	client, err := s.commandClient(
+		screenshotOperation,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	command, err := wire.NewCommand(
+		screenshotOperation,
+		http.MethodGet,
+		"session",
+		s.id,
+		"screenshot",
+	)
+	if err != nil {
+		return nil, &Error{
+			Code:      CodeInvalidConfig,
+			Operation: screenshotOperation,
+			Message:   "screenshot command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	var screenshot []byte
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		nil,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			encoded, decodeErr := codec.DecodeJSONString(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			decoded, decodeErr := codec.DecodeBase64(
+				ctx,
+				encoded,
+				client.limits.MaxResponseBytes,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			screenshot = decoded
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return screenshot, nil
+}
+
+// PageSource 获取当前 Session 的页面源。
+//
+// Page Source 可能是较大的 XML 或 HTML 字符串，
+// 因此使用独立的 MaxPageSourceResponseBytes 响应上限。
+func (s *Session) PageSource(
+	ctx context.Context,
+) (string, error) {
+	client, err := s.commandClient(
+		pageSourceOperation,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	command, err := wire.NewCommand(
+		pageSourceOperation,
+		http.MethodGet,
+		"session",
+		s.id,
+		"source",
+	)
+	if err != nil {
+		return "", &Error{
+			Code:      CodeInvalidConfig,
+			Operation: pageSourceOperation,
+			Message:   "page source command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	var source string
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		nil,
+		client.commandTimeout,
+		client.limits.MaxPageSourceResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			decoded, decodeErr := codec.DecodeJSONString(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			source = decoded
+			return nil
+		},
+	)
+	if err != nil {
+		return "", err
+	}
+
+	return source, nil
+}
+
 // Close 删除远端 WebDriver Session.
 //
 // Close 可以重复调用。
@@ -213,6 +413,46 @@ func (s *Session) Close(ctx context.Context) error {
 	}
 
 	return err
+}
+
+// commandClient 校验 Session 是否允许执行普通远端命令。
+//
+// 该方法只校验本地能够确认的 Session 状态。
+// 它不会主动探测远端 Session 是否仍然存在。
+func (s *Session) commandClient(
+	operation string,
+) (*Client, error) {
+	if s == nil ||
+		s.client == nil ||
+		s.state == nil ||
+		s.id == "" {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: operation,
+			Message:   "session is not initialized",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	if !s.usable {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: operation,
+			Message:   "session is not usable for commands",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	if s.state.closed.Load() {
+		return nil, &Error{
+			Code:      CodeSessionLost,
+			Operation: operation,
+			Message:   "session is closed",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	return s.client, nil
 }
 
 // newSession 创建本地 Session 句柄.
