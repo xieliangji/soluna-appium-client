@@ -35,7 +35,10 @@ func Text(value string) string {
 	lower := strings.ToLower(value)
 
 	for key := range sensitiveKeys {
-		if strings.Contains(normalizeKey(lower), key) {
+		if strings.Contains(
+			normalizeKey(lower),
+			key,
+		) {
 			return redactedValue
 		}
 	}
@@ -43,38 +46,51 @@ func Text(value string) string {
 	return value
 }
 
-// JSON 对 JSON 数据中的敏感字段值进行脱敏。
+// JSON 对 JSON 数据中的敏感信息进行递归脱敏。
 //
-// JSON 对象会递归处理；数组中的对象同样会被处理。
-// 非敏感字段及其原始值类型保持不变。
+// 已知敏感字段的值会直接替换。
+// 普通字符串值同样会经过 Text 检查，避免敏感信息通过
+// message、stacktrace 等非敏感字段名中的自由文本泄漏。
+//
+// 数组和嵌套对象会递归处理。
+// 非字符串且不属于敏感字段的值保持原始类型。
 func JSON(data []byte) ([]byte, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
-		return nil, errors.New("JSON data is empty")
+		return nil, errors.New(
+			"JSON data is empty",
+		)
 	}
 
-	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder := json.NewDecoder(
+		bytes.NewReader(data),
+	)
 	decoder.UseNumber()
 
 	var value any
+
 	if err := decoder.Decode(&value); err != nil {
 		return nil, err
 	}
 
 	var trailing any
+
 	if err := decoder.Decode(&trailing); err != io.EOF {
 		if err == nil {
-			return nil, errors.New("JSON data contains multiple values")
+			return nil, errors.New(
+				"JSON data contains multiple values",
+			)
 		}
+
 		return nil, err
 	}
 
-	redactValue(value)
+	value = redactValue(value)
 
 	return json.Marshal(value)
 }
 
 // redactValue 递归处理 JSON 解码后的值。
-func redactValue(value any) {
+func redactValue(value any) any {
 	switch current := value.(type) {
 	case map[string]any:
 		for key, child := range current {
@@ -82,25 +98,39 @@ func redactValue(value any) {
 				current[key] = redactedValue
 				continue
 			}
-			redactValue(child)
+
+			current[key] = redactValue(child)
 		}
 
+		return current
+
 	case []any:
-		for _, child := range current {
-			redactValue(child)
+		for index, child := range current {
+			current[index] = redactValue(child)
 		}
+
+		return current
+
+	case string:
+		return Text(current)
+
+	default:
+		return current
 	}
 }
 
 // isSensitiveKey 判断 JSON 字段名是否属于敏感字段。
 func isSensitiveKey(key string) bool {
 	_, ok := sensitiveKeys[normalizeKey(key)]
+
 	return ok
 }
 
 // normalizeKey 将字段名转换成用于敏感字段匹配的规范形式。
 func normalizeKey(key string) string {
-	key = strings.ToLower(strings.TrimSpace(key))
+	key = strings.ToLower(
+		strings.TrimSpace(key),
+	)
 
 	replacer := strings.NewReplacer(
 		"_", "",
