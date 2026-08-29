@@ -166,17 +166,6 @@ func (c *Client) executeCommand(
 
 	cancel()
 
-	if err := ctx.Err(); err != nil {
-		resultErr = contextExecutionError(
-			operation,
-			response.StatusCode,
-			DeliveryAcknowledged,
-			err,
-			err,
-		)
-		return resultErr
-	}
-
 	if err := decoder(ctx, response.Value); err != nil {
 		resultErr = mapResponseDecodeFailure(
 			operation,
