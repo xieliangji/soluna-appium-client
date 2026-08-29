@@ -17,6 +17,7 @@ const (
 	getElementRectOperation      = "get_element_rect"
 	getElementTextOperation      = "get_element_text"
 	getElementAttributeOperation = "get_element_attribute"
+	clickElementOperation        = "click_element"
 	clearElementOperation        = "clear_element"
 	sendKeysOperation            = "send_keys"
 )
@@ -295,6 +296,47 @@ func (e *Element) Attribute(
 	}
 
 	return value, exists, nil
+}
+
+// Click 点击当前元素。
+//
+// Click 是有副作用的远端命令。
+// 客户端不会在传输失败或投递状态不确定时自动重试。
+func (e *Element) Click(
+	ctx context.Context,
+) error {
+	session, client, err := e.commandContext(
+		clickElementOperation,
+	)
+	if err != nil {
+		return err
+	}
+
+	command, err := wire.NewCommand(
+		clickElementOperation,
+		http.MethodPost,
+		"session",
+		session.id,
+		"element",
+		e.id,
+		"click",
+	)
+	if err != nil {
+		return commandDefinitionError(
+			clickElementOperation,
+			"click element command definition is invalid",
+			err,
+		)
+	}
+
+	return client.executeCommand(
+		ctx,
+		command,
+		struct{}{},
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		decodeNullResponse,
+	)
 }
 
 // Clear 清除元素当前输入内容。
