@@ -14,6 +14,7 @@ import (
 
 const (
 	findElementOperation         = "find_element"
+	findElementsOperation        = "find_elements"
 	getElementRectOperation      = "get_element_rect"
 	getElementTextOperation      = "get_element_text"
 	getElementAttributeOperation = "get_element_attribute"
@@ -109,6 +110,100 @@ func (s *Session) Find(
 		session: s,
 		id:      elementID,
 	}, nil
+}
+
+// FindElements 查找当前 Session 中全部匹配 Locator 的元素。
+//
+// Locator Strategy 会按照调用方提供的协议值原样发送，
+// 客户端不会执行别名转换或自动规范化。
+//
+// 没有匹配元素时返回空 slice 和 nil error。
+func (s *Session) FindElements(
+	ctx context.Context,
+	locator Locator,
+) ([]*Element, error) {
+	client, err := s.commandClient(
+		findElementsOperation,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if locator.Strategy == "" {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: findElementsOperation,
+			Message:   "locator strategy is empty",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	command, err := wire.NewCommand(
+		findElementsOperation,
+		http.MethodPost,
+		"session",
+		s.id,
+		"elements",
+	)
+	if err != nil {
+		return nil, &Error{
+			Code:      CodeInvalidConfig,
+			Operation: findElementsOperation,
+			Message:   "find elements command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	request := struct {
+		Using string `json:"using"`
+		Value string `json:"value"`
+	}{
+		Using: string(locator.Strategy),
+		Value: locator.Value,
+	}
+
+	var elementIDs []string
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		request,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			ids, decodeErr := decodeElementReferences(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			elementIDs = ids
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	elements := make(
+		[]*Element,
+		len(elementIDs),
+	)
+
+	for index, elementID := range elementIDs {
+		elements[index] = &Element{
+			session: s,
+			id:      elementID,
+		}
+	}
+
+	return elements, nil
 }
 
 // ID 返回远端 WebDriver Element ID。
@@ -492,6 +587,72 @@ func decodeElementReference(
 	}
 
 	return elementID, nil
+}
+
+// decodeElementReferences 严格解码 W3C Element Reference 数组。
+//
+// 返回值必须是 JSON array。
+// 数组中的每个元素都必须使用 W3C element reference key，
+// 不接受旧 JSON Wire Protocol 的 ELEMENT 别名。
+func decodeElementReferences(
+	ctx context.Context,
+	value json.RawMessage,
+) ([]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	trimmed := bytes.TrimSpace(value)
+
+	if len(trimmed) == 0 ||
+		trimmed[0] != '[' {
+		return nil, errors.New(
+			"elements response must be a JSON array",
+		)
+	}
+
+	var references []json.RawMessage
+
+	if err := json.Unmarshal(
+		trimmed,
+		&references,
+	); err != nil {
+		return nil, fmt.Errorf(
+			"decode element references: %w",
+			err,
+		)
+	}
+
+	elementIDs := make(
+		[]string,
+		len(references),
+	)
+
+	for index, reference := range references {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+
+		elementID, err := decodeElementReference(
+			ctx,
+			reference,
+		)
+		if err != nil {
+			return nil, fmt.Errorf(
+				"decode element reference at index %d: %w",
+				index,
+				err,
+			)
+		}
+
+		elementIDs[index] = elementID
+	}
+
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+
+	return elementIDs, nil
 }
 
 // decodeRect 严格解码元素 Rect。
