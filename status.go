@@ -98,22 +98,22 @@ func decodeServerStatus(
 
 	if payload.Ready == nil {
 		return ServerStatus{}, errors.New(
-			"Appium status response does not contain ready",
+			"appium status response does not contain ready",
 		)
 	}
 	if payload.Message == nil {
 		return ServerStatus{}, errors.New(
-			"Appium status response does not contain message",
+			"appium status response does not contain message",
 		)
 	}
 	if payload.Build == nil {
 		return ServerStatus{}, errors.New(
-			"Appium status response does not contain build",
+			"appium status response does not contain build",
 		)
 	}
 	if payload.Build.Version == nil {
 		return ServerStatus{}, errors.New(
-			"Appium status response does not contain build.version",
+			"appium status response does not contain build.version",
 		)
 	}
 
