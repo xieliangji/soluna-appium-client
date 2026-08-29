@@ -359,3 +359,174 @@ func TestCreateSessionCleansUpAfterInvalidCapabilities(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSessionCloseMarksClosedAfterAcknowledgedInvalidSession(t *testing.T) {
+	recorder := contracttest.NewRecorder(
+		http.HandlerFunc(
+			func(
+				writer http.ResponseWriter,
+				request *http.Request,
+			) {
+				writer.Header().Set(
+					"Content-Type",
+					"application/json",
+				)
+
+				switch {
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+						),
+					)
+
+				case request.Method == http.MethodDelete &&
+					request.RequestURI == "/session/session":
+					writer.WriteHeader(
+						http.StatusNotFound,
+					)
+
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"error":"invalid session id","message":"session no longer exists"}}`,
+						),
+					)
+
+				default:
+					http.NotFound(
+						writer,
+						request,
+					)
+				}
+			},
+		),
+	)
+
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+
+	client, err := server.NewClient(
+		appium.ClientOptions{},
+	)
+	if err != nil {
+		t.Fatalf(
+			"create client: %v",
+			err,
+		)
+	}
+
+	session, err := client.CreateSession(
+		context.Background(),
+		appium.MatchCapabilities(
+			appium.Capabilities{
+				"platformName":          "iOS",
+				"appium:automationName": "XCUITest",
+			},
+		),
+	)
+	if err != nil {
+		t.Fatalf(
+			"create session: %v",
+			err,
+		)
+	}
+
+	recorder.Reset()
+
+	err = session.Close(
+		context.Background(),
+	)
+	if err == nil {
+		t.Fatal(
+			"expected invalid session error",
+		)
+	}
+
+	if !appium.IsErrorCode(
+		err,
+		appium.CodeSessionLost,
+	) {
+		t.Fatalf(
+			"unexpected close error code: %v",
+			err,
+		)
+	}
+
+	if delivery := appium.DeliveryOf(err); delivery != appium.DeliveryAcknowledged {
+		t.Fatalf(
+			"unexpected close delivery state: expected %q, got %q",
+			appium.DeliveryAcknowledged,
+			delivery,
+		)
+	}
+
+	// 远端已经明确确认 Session 不存在，
+	// 因此本地状态必须被视为已经关闭。
+	if err := session.Close(
+		context.Background(),
+	); err != nil {
+		t.Fatalf(
+			"second close after acknowledged invalid session: %v",
+			err,
+		)
+	}
+
+	// 已关闭 Session 的普通命令必须在本地拒绝，
+	// 不允许再次探测或向远端发送请求。
+	_, err = session.WindowRect(
+		context.Background(),
+	)
+	if err == nil {
+		t.Fatal(
+			"expected closed session error",
+		)
+	}
+
+	if !appium.IsErrorCode(
+		err,
+		appium.CodeSessionLost,
+	) {
+		t.Fatalf(
+			"unexpected closed session error code: %v",
+			err,
+		)
+	}
+
+	if delivery := appium.DeliveryOf(err); delivery != appium.DeliveryNotSent {
+		t.Fatalf(
+			"unexpected closed session delivery state: expected %q, got %q",
+			appium.DeliveryNotSent,
+			delivery,
+		)
+	}
+
+	requests := recorder.Requests()
+	if len(requests) != 1 {
+		t.Fatalf(
+			"unexpected request count: expected 1, got %d",
+			len(requests),
+		)
+	}
+
+	if err := contracttest.MatchMethod(
+		requests[0],
+		http.MethodDelete,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := contracttest.MatchRequestURI(
+		requests[0],
+		"/session/session",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := contracttest.MatchBody(
+		requests[0],
+		nil,
+	); err != nil {
+		t.Fatal(err)
+	}
+}
