@@ -18,10 +18,9 @@ import (
 // Appium 3 当前官方协议：POST /session 成功值是 {sessionId, capabilities}，DELETE /session/:sessionId 成功值是 null。
 
 const (
-	createSessionOperation      = "create_session"
-	deleteSessionOperation      = "delete_session"
-	cleanupSessionOperation     = "cleanup_session"
-	checkSessionHealthOperation = "check_session_health"
+	createSessionOperation  = "create_session"
+	deleteSessionOperation  = "delete_session"
+	cleanupSessionOperation = "cleanup_session"
 
 	getWindowRectOperation = "get_window_rect"
 	screenshotOperation    = "screenshot"
