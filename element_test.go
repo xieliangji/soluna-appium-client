@@ -437,3 +437,139 @@ func TestFindRejectsLegacyElementReference(t *testing.T) {
 		)
 	}
 }
+
+func TestElementClick(t *testing.T) {
+	recorder := contracttest.NewRecorder(
+		http.HandlerFunc(
+			func(
+				writer http.ResponseWriter,
+				request *http.Request,
+			) {
+				writer.Header().Set(
+					"Content-Type",
+					"application/json",
+				)
+
+				switch {
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`,
+						),
+					)
+
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session/session%2Fid/element":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"element-6066-11e4-a52e-4f735466cecf":"element/id"}}`,
+						),
+					)
+
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session/session%2Fid/element/element%2Fid/click":
+					_, _ = writer.Write(
+						[]byte(`{"value":null}`),
+					)
+
+				default:
+					http.NotFound(
+						writer,
+						request,
+					)
+				}
+			},
+		),
+	)
+
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+
+	client, err := server.NewClient(
+		appium.ClientOptions{},
+	)
+	if err != nil {
+		t.Fatalf(
+			"create client: %v",
+			err,
+		)
+	}
+
+	session, err := client.CreateSession(
+		context.Background(),
+		appium.MatchCapabilities(
+			appium.Capabilities{
+				"platformName":          "iOS",
+				"appium:automationName": "XCUITest",
+			},
+		),
+	)
+	if err != nil {
+		t.Fatalf(
+			"create session: %v",
+			err,
+		)
+	}
+
+	element, err := session.Find(
+		context.Background(),
+		appium.ID("login"),
+	)
+	if err != nil {
+		t.Fatalf(
+			"find element: %v",
+			err,
+		)
+	}
+
+	recorder.Reset()
+
+	if err := element.Click(
+		context.Background(),
+	); err != nil {
+		t.Fatalf(
+			"click element: %v",
+			err,
+		)
+	}
+
+	requests := recorder.Requests()
+	if len(requests) != 1 {
+		t.Fatalf(
+			"unexpected request count: expected 1, got %d",
+			len(requests),
+		)
+	}
+
+	request := requests[0]
+
+	if err := contracttest.MatchMethod(
+		request,
+		http.MethodPost,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := contracttest.MatchRequestURI(
+		request,
+		"/session/session%2Fid/element/element%2Fid/click",
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := contracttest.MatchJSONBody(
+		request,
+		map[string]any{},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := contracttest.MatchHeader(
+		request,
+		"Content-Type",
+		"application/json",
+	); err != nil {
+		t.Fatal(err)
+	}
+}
