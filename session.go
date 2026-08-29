@@ -18,6 +18,11 @@ import (
 // Appium 3 当前官方协议：POST /session 成功值是 {sessionId, capabilities}，DELETE /session/:sessionId 成功值是 null。
 
 const (
+	AutomationNameXCUITest     = "XCUITest"
+	AutomationNameUiAutomator2 = "UiAutomator2"
+)
+
+const (
 	createSessionOperation  = "create_session"
 	deleteSessionOperation  = "delete_session"
 	cleanupSessionOperation = "cleanup_session"
@@ -32,11 +37,12 @@ const (
 // Session 与创建它的 Client 绑定。
 // Session 不负责逻辑会话恢复，也不会在远端 Session 丢失后自动重建。
 type Session struct {
-	client       *Client
-	id           string
-	capabilities Capabilities
-	usable       bool
-	state        *sessionState
+	client         *Client
+	id             string
+	capabilities   Capabilities
+	automationName string
+	usable         bool
+	state          *sessionState
 }
 
 // sessionState 保存 Session 的可变生命周期状态.
@@ -52,8 +58,9 @@ type sessionState struct {
 // SessionID 会优先于 Capabilities 被解析，以便后续解析失败时
 // 仍然能够清理已经创建的远端 Session。
 type createSessionResult struct {
-	SessionID    string
-	Capabilities Capabilities
+	SessionID      string
+	Capabilities   Capabilities
+	AutomationName string
 }
 
 // CreateSession 创建新的远端 WebDriver Session.
@@ -120,6 +127,7 @@ func (c *Client) CreateSession(
 			c,
 			result.SessionID,
 			result.Capabilities,
+			result.AutomationName,
 			true,
 		), nil
 	}
@@ -139,6 +147,7 @@ func (c *Client) CreateSession(
 		c,
 		result.SessionID,
 		nil,
+		"",
 		false,
 	)
 
@@ -169,6 +178,20 @@ func (s *Session) Capabilities() Capabilities {
 	}
 
 	return cloneCapabilities(s.capabilities)
+}
+
+// AutomationName 返回当前 Session 使用的 Appium Driver automationName。
+//
+// 返回值来自创建 Session 后远端确认的 Capabilities，
+// 不使用创建请求中的原始值，也不会进行大小写规范化。
+//
+// 对于创建失败后仅用于清理的不可用 Session，返回空字符串。
+func (s *Session) AutomationName() string {
+	if s == nil {
+		return ""
+	}
+
+	return s.automationName
 }
 
 // WindowRect 获取当前 Session 的 WebDriver Window Rect。
@@ -460,14 +483,16 @@ func newSession(
 	client *Client,
 	sessionID string,
 	capabilities Capabilities,
+	automationName string,
 	usable bool,
 ) *Session {
 	return &Session{
-		client:       client,
-		id:           sessionID,
-		capabilities: cloneCapabilities(capabilities),
-		usable:       usable,
-		state:        &sessionState{},
+		client:         client,
+		id:             sessionID,
+		capabilities:   cloneCapabilities(capabilities),
+		automationName: automationName,
+		usable:         usable,
+		state:          &sessionState{},
 	}
 }
 
@@ -608,11 +633,17 @@ func decodeCreateSessionResponse(
 		)
 	}
 
+	automationName, err := decodeAutomationName(capabilities)
+	if err != nil {
+		return result, err
+	}
+
 	if err := ctx.Err(); err != nil {
 		return result, err
 	}
 
 	result.Capabilities = capabilities
+	result.AutomationName = automationName
 
 	return result, nil
 }
@@ -682,4 +713,32 @@ func cloneCapabilityValue(value any) any {
 	default:
 		return current
 	}
+}
+
+// decodeAutomationName 从 Appium 处理后的 Session Capabilities 中
+// 严格读取当前 Session 使用的 Driver automationName。
+func decodeAutomationName(
+	capabilities Capabilities,
+) (string, error) {
+	value, exists := capabilities["automationName"]
+	if !exists {
+		return "", errors.New(
+			"create session capabilities do not contain automationName",
+		)
+	}
+
+	automationName, ok := value.(string)
+	if !ok {
+		return "", errors.New(
+			"create session automationName must be a string",
+		)
+	}
+
+	if automationName == "" {
+		return "", errors.New(
+			"create session automationName must not be empty",
+		)
+	}
+
+	return automationName, nil
 }
