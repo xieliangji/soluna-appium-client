@@ -746,3 +746,216 @@ func TestCreateSessionReturnsCleanupOnlySessionWhenAutomaticCleanupFails(
 		t.Fatal(err)
 	}
 }
+
+func TestSessionCloseKeepsOpenAfterUnknownDelivery(t *testing.T) {
+	deleteCount := 0
+	hijackResult := make(
+		chan error,
+		1,
+	)
+
+	recorder := contracttest.NewRecorder(
+		http.HandlerFunc(
+			func(
+				writer http.ResponseWriter,
+				request *http.Request,
+			) {
+				writer.Header().Set(
+					"Content-Type",
+					"application/json",
+				)
+
+				switch {
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+						),
+					)
+
+				case request.Method == http.MethodDelete &&
+					request.RequestURI == "/session/session":
+					deleteCount++
+
+					if deleteCount == 1 {
+						controller := http.NewResponseController(
+							writer,
+						)
+
+						connection, _, err := controller.Hijack()
+						hijackResult <- err
+
+						if err != nil {
+							return
+						}
+
+						// DELETE 已经到达 Server，
+						// 但在发送任何 HTTP Response 前断开连接。
+						//
+						// 客户端无法确认远端是否已经执行删除，
+						// 因此 Delivery 必须是 Unknown。
+						_ = connection.Close()
+						return
+					}
+
+					// 第二次 DELETE 是调用方显式重试 Close。
+					_, _ = writer.Write(
+						[]byte(`{"value":null}`),
+					)
+
+				default:
+					http.NotFound(
+						writer,
+						request,
+					)
+				}
+			},
+		),
+	)
+
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+
+	client, err := server.NewClient(
+		appium.ClientOptions{},
+	)
+	if err != nil {
+		t.Fatalf(
+			"create client: %v",
+			err,
+		)
+	}
+
+	session, err := client.CreateSession(
+		context.Background(),
+		appium.MatchCapabilities(
+			appium.Capabilities{
+				"platformName":          "iOS",
+				"appium:automationName": "XCUITest",
+			},
+		),
+	)
+	if err != nil {
+		t.Fatalf(
+			"create session: %v",
+			err,
+		)
+	}
+
+	recorder.Reset()
+
+	err = session.Close(
+		context.Background(),
+	)
+
+	if hijackErr := <-hijackResult; hijackErr != nil {
+		t.Fatalf(
+			"hijack close connection: %v",
+			hijackErr,
+		)
+	}
+
+	if err == nil {
+		t.Fatal(
+			"expected uncertain close transport error",
+		)
+	}
+
+	if !appium.IsErrorCode(
+		err,
+		appium.CodeTransportFailed,
+	) {
+		t.Fatalf(
+			"unexpected close error code: %v",
+			err,
+		)
+	}
+
+	if delivery := appium.DeliveryOf(err); delivery != appium.DeliveryUnknown {
+		t.Fatalf(
+			"unexpected close delivery state: expected %q, got %q",
+			appium.DeliveryUnknown,
+			delivery,
+		)
+	}
+
+	requests := recorder.Requests()
+	if len(requests) != 1 {
+		t.Fatalf(
+			"unexpected request count after uncertain close: expected 1, got %d",
+			len(requests),
+		)
+	}
+
+	// DeliveryUnknown 不能把本地 Session 标记为 closed。
+	// 调用方必须仍然能够显式重试 Close。
+	if err := session.Close(
+		context.Background(),
+	); err != nil {
+		t.Fatalf(
+			"retry close after unknown delivery: %v",
+			err,
+		)
+	}
+
+	requests = recorder.Requests()
+	if len(requests) != 2 {
+		t.Fatalf(
+			"retry close must send another DELETE: expected 2 requests, got %d",
+			len(requests),
+		)
+	}
+
+	for index, request := range requests {
+		if err := contracttest.MatchMethod(
+			request,
+			http.MethodDelete,
+		); err != nil {
+			t.Fatalf(
+				"DELETE request %d: %v",
+				index+1,
+				err,
+			)
+		}
+
+		if err := contracttest.MatchRequestURI(
+			request,
+			"/session/session",
+		); err != nil {
+			t.Fatalf(
+				"DELETE request %d: %v",
+				index+1,
+				err,
+			)
+		}
+
+		if err := contracttest.MatchBody(
+			request,
+			nil,
+		); err != nil {
+			t.Fatalf(
+				"DELETE request %d: %v",
+				index+1,
+				err,
+			)
+		}
+	}
+
+	// 第二次 Close 已得到成功确认，此时才真正进入 closed 状态。
+	if err := session.Close(
+		context.Background(),
+	); err != nil {
+		t.Fatalf(
+			"third close after confirmed close: %v",
+			err,
+		)
+	}
+
+	if requests := recorder.Requests(); len(requests) != 2 {
+		t.Fatalf(
+			"confirmed closed session must not send another DELETE: got %d requests",
+			len(requests),
+		)
+	}
+}
