@@ -36,7 +36,7 @@ func (s *Session) ActivateApp(
 	ctx context.Context,
 	appID string,
 ) error {
-	client, err := s.applicationCommandClient(
+	client, err := s.commandClient(
 		activateAppOperation,
 	)
 	if err != nil {
@@ -94,7 +94,7 @@ func (s *Session) TerminateApp(
 	ctx context.Context,
 	appID string,
 ) error {
-	client, err := s.applicationCommandClient(
+	client, err := s.commandClient(
 		terminateAppOperation,
 	)
 	if err != nil {
@@ -153,7 +153,7 @@ func (s *Session) AppState(
 	ctx context.Context,
 	appID string,
 ) (AppState, error) {
-	client, err := s.applicationCommandClient(
+	client, err := s.commandClient(
 		getAppStateOperation,
 	)
 	if err != nil {
@@ -220,43 +220,6 @@ func (s *Session) AppState(
 	}
 
 	return state, nil
-}
-
-// applicationCommandClient 校验 Session 是否允许执行应用控制命令。
-func (s *Session) applicationCommandClient(
-	operation string,
-) (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: operation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
 }
 
 // decodeAppState 严格解码 Appium queryAppState 返回值。
