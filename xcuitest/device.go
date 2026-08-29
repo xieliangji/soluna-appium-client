@@ -2,6 +2,8 @@ package xcuitest
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 
 	appium "github.com/xieliangji/soluna-appium-client"
 )
@@ -9,7 +11,26 @@ import (
 const (
 	iosPressButtonOperation = "ios_press_button"
 	iosPressButtonScript    = "mobile: pressButton"
+
+	iosDeviceScreenInfoOperation = "ios_device_screen_info"
+	iosDeviceScreenInfoScript    = "mobile: deviceScreenInfo"
 )
+
+// ScreenSize 表示 XCUITest 返回的屏幕尺寸。
+// 单位保持 Driver 返回的坐标单位，不执行像素换算。
+type ScreenSize struct {
+	Width  float64
+	Height float64
+}
+
+// ScreenInfo 表示 XCUITest Driver 返回的 iOS 屏幕信息。
+//
+// Scale 是截图像素与 XCTest 屏幕坐标之间的重要设备事实。
+// 本类型只暴露当前协议中稳定定义的字段。
+type ScreenInfo struct {
+	StatusBarSize ScreenSize
+	Scale         float64
+}
 
 // IOSButton 表示 XCUITest Driver 支持的 iOS 物理按键。
 type IOSButton string
@@ -76,4 +97,95 @@ func validIOSButton(button IOSButton) bool {
 	default:
 		return false
 	}
+}
+
+// IOSDeviceScreenInfo 获取当前 iOS 设备的屏幕信息。
+//
+// 返回值来自 XCUITest Driver 的 mobile: deviceScreenInfo。
+// 客户端不会使用 Scale 自动修改 WindowRect、Element Rect、
+// Screenshot 或 W3C Actions 的坐标语义。
+func IOSDeviceScreenInfo(
+	ctx context.Context,
+	session *appium.Session,
+) (ScreenInfo, error) {
+	if err := requireXCUITestSession(
+		session,
+		iosDeviceScreenInfoOperation,
+	); err != nil {
+		return ScreenInfo{}, err
+	}
+
+	value, err := session.ExecuteScript(
+		ctx,
+		iosDeviceScreenInfoScript,
+		nil,
+	)
+	if err != nil {
+		return ScreenInfo{}, err
+	}
+
+	info, err := decodeIOSDeviceScreenInfo(value)
+	if err != nil {
+		return ScreenInfo{}, &appium.Error{
+			Code:      appium.CodeResponseInvalid,
+			Operation: iosDeviceScreenInfoOperation,
+			Message:   "invalid iOS device screen info response",
+			Delivery:  appium.DeliveryAcknowledged,
+			Cause:     err,
+		}
+	}
+
+	return info, nil
+}
+
+func decodeIOSDeviceScreenInfo(
+	value json.RawMessage,
+) (ScreenInfo, error) {
+	var payload struct {
+		StatusBarSize *struct {
+			Width  *float64 `json:"width"`
+			Height *float64 `json:"height"`
+		} `json:"statusBarSize"`
+
+		Scale *float64 `json:"scale"`
+	}
+
+	if err := json.Unmarshal(
+		value,
+		&payload,
+	); err != nil {
+		return ScreenInfo{}, err
+	}
+
+	if payload.StatusBarSize == nil {
+		return ScreenInfo{}, errors.New(
+			"iOS device screen info does not contain statusBarSize",
+		)
+	}
+
+	if payload.StatusBarSize.Width == nil {
+		return ScreenInfo{}, errors.New(
+			"iOS device screen info statusBarSize does not contain width",
+		)
+	}
+
+	if payload.StatusBarSize.Height == nil {
+		return ScreenInfo{}, errors.New(
+			"iOS device screen info statusBarSize does not contain height",
+		)
+	}
+
+	if payload.Scale == nil {
+		return ScreenInfo{}, errors.New(
+			"iOS device screen info does not contain scale",
+		)
+	}
+
+	return ScreenInfo{
+		StatusBarSize: ScreenSize{
+			Width:  *payload.StatusBarSize.Width,
+			Height: *payload.StatusBarSize.Height,
+		},
+		Scale: *payload.Scale,
+	}, nil
 }
