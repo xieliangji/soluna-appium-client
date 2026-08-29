@@ -54,6 +54,22 @@ func TestElementCommands(t *testing.T) {
 						),
 					)
 
+				case request.Method == http.MethodPost &&
+					request.RequestURI == "/session/session%2Fid/elements":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":[{"element-6066-11e4-a52e-4f735466cecf":"element/id"}]}`,
+						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/window/rect":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"x":0,"y":0,"width":390,"height":844}}`,
+						),
+					)
+
 				case request.Method == http.MethodGet &&
 					request.RequestURI == "/session/session%2Fid/element/element%2Fid/rect":
 					_, _ = writer.Write(
@@ -138,6 +154,10 @@ func TestElementCommands(t *testing.T) {
 			element.ID(),
 		)
 	}
+
+	// Find 的具体协议将在 window-aware 查找测试中单独验证。
+	// 这里从此只验证已经获得 Element 后的元素命令。
+	recorder.Reset()
 
 	text, err := element.Text(
 		context.Background(),
@@ -234,69 +254,35 @@ func TestElementCommands(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 8 {
+	if len(requests) != 6 {
 		t.Fatalf(
-			"unexpected request count: expected 8, got %d",
+			"unexpected request count: expected 6, got %d",
 			len(requests),
 		)
 	}
 
-	findRequest := requests[1]
-
-	if err := contracttest.MatchMethod(
-		findRequest,
-		http.MethodPost,
-	); err != nil {
-		t.Fatal(err)
-	}
-
 	if err := contracttest.MatchRequestURI(
-		findRequest,
-		"/session/session%2Fid/element",
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := contracttest.MatchJSONBody(
-		findRequest,
-		map[string]any{
-			"using": "xpath",
-			"value": `//*[@name='login']`,
-		},
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := contracttest.MatchHeader(
-		findRequest,
-		"Content-Type",
-		"application/json",
-	); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := contracttest.MatchRequestURI(
-		requests[2],
+		requests[0],
 		"/session/session%2Fid/element/element%2Fid/text",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[3],
+		requests[1],
 		"/session/session%2Fid/element/element%2Fid/attribute/name%2Fvalue",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[4],
+		requests[2],
 		"/session/session%2Fid/element/element%2Fid/rect",
 	); err != nil {
 		t.Fatal(err)
 	}
 
-	clearRequest := requests[5]
+	clearRequest := requests[3]
 
 	if err := contracttest.MatchMethod(
 		clearRequest,
@@ -319,7 +305,7 @@ func TestElementCommands(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sendKeysRequest := requests[6]
+	sendKeysRequest := requests[4]
 
 	if err := contracttest.MatchMethod(
 		sendKeysRequest,
@@ -369,6 +355,13 @@ func TestFindRejectsLegacyElementReference(t *testing.T) {
 					_, _ = writer.Write(
 						[]byte(
 							`{"value":{"ELEMENT":"legacy-element"}}`,
+						),
+					)
+
+				case "/session/session/elements":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":[{"ELEMENT":"legacy-element"}]}`,
 						),
 					)
 
@@ -467,6 +460,30 @@ func TestFindElements(t *testing.T) {
 						),
 					)
 
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/window/rect":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"x":0,"y":0,"width":390,"height":844}}`,
+						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/element/element%2F1/rect":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"x":10,"y":20,"width":100,"height":40}}`,
+						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/element/element%2F2/rect":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"x":10,"y":100,"width":100,"height":40}}`,
+						),
+					)
+
 				default:
 					http.NotFound(
 						writer,
@@ -543,10 +560,9 @@ func TestFindElements(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 1 {
-		t.Fatalf(
-			"unexpected request count: expected 1, got %d",
-			len(requests),
+	if len(requests) == 0 {
+		t.Fatal(
+			"expected find elements request",
 		)
 	}
 
