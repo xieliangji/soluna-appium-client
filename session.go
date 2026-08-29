@@ -18,9 +18,10 @@ import (
 // Appium 3 当前官方协议：POST /session 成功值是 {sessionId, capabilities}，DELETE /session/:sessionId 成功值是 null。
 
 const (
-	createSessionOperation  = "create_session"
-	deleteSessionOperation  = "delete_session"
-	cleanupSessionOperation = "cleanup_session"
+	createSessionOperation      = "create_session"
+	deleteSessionOperation      = "delete_session"
+	cleanupSessionOperation     = "cleanup_session"
+	checkSessionHealthOperation = "check_session_health"
 
 	getWindowRectOperation = "get_window_rect"
 	screenshotOperation    = "screenshot"
@@ -187,6 +188,32 @@ func (s *Session) AutomationName() string {
 	}
 
 	return s.automationName
+}
+
+// Healthy 探测当前 Session 是否仍具备执行真实 Driver 命令的能力。
+//
+// Healthy 使用 WindowRect 作为轻量、只读、无副作用的 operational probe。
+// 成功返回表示在探测发生的当前时刻，Appium Server、Session、对应 Driver
+// 以及基础 Driver command path 均能够完成一次真实命令。
+//
+// Healthy 不保证后续命令一定成功；探测成功后远端状态仍可能发生变化。
+//
+// 如果远端明确返回 invalid session id，说明 Session 已经不存在。
+// 此时返回 CodeSessionLost，并将本地 Session 标记为已关闭。
+//
+// 其他 Driver、传输或超时错误只作为当前探测失败事实返回，
+// 不会擅自把 Session 标记为已关闭。
+func (s *Session) Healthy(ctx context.Context) error {
+	_, err := s.WindowRect(ctx)
+	if err == nil {
+		return nil
+	}
+
+	if IsErrorCode(err, CodeSessionLost) && DeliveryOf(err) == DeliveryAcknowledged {
+		s.state.closed.Store(true)
+	}
+
+	return err
 }
 
 // WindowRect 获取当前 Session 的 WebDriver Window Rect。
