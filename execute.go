@@ -34,7 +34,9 @@ func (s *Session) ExecuteScript(
 	script string,
 	arguments []any,
 ) (json.RawMessage, error) {
-	client, err := s.executeScriptClient()
+	client, err := s.commandClient(
+		executeScriptOperation,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -100,41 +102,6 @@ func (s *Session) ExecuteScript(
 	}
 
 	return result, nil
-}
-
-// executeScriptClient 校验 Session 是否允许执行脚本命令。
-func (s *Session) executeScriptClient() (*Client, error) {
-	if s == nil ||
-		s.client == nil ||
-		s.state == nil ||
-		s.id == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: executeScriptOperation,
-			Message:   "session is not initialized",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if !s.usable {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: executeScriptOperation,
-			Message:   "session is not usable for commands",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	if s.state.closed.Load() {
-		return nil, &Error{
-			Code:      CodeSessionLost,
-			Operation: executeScriptOperation,
-			Message:   "session is closed",
-			Delivery:  DeliveryNotSent,
-		}
-	}
-
-	return s.client, nil
 }
 
 // executeCommand 执行一条 WebDriver/Appium 远端命令。
