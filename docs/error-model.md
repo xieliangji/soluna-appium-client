@@ -47,8 +47,10 @@ DP-041 的 `Session.Commands` 和 `Session.Extensions` 对目录响应执行整�
 `DeliveryAcknowledged`；
 不返回部分目录。顶层 `rest`/`bidi`（Commands）和 `rest`（Extensions）可缺失，
 但已存在 section 内的必需 `base`/`driver` child 缺失即为格式错误；显式空 child
-object 合法，`plugins` 可缺失。`params` 每项必须是包含非空 `name` string 与
-`required` boolean 的对象；缺失字段、显式 `null` 或其他已知类型错误均拒绝。
+object 合法，`plugins` 可缺失。`plugins` 存在时必须为 object，且每个 plugin value
+必须为 object；显式 `null` 或其他类型均拒绝。`params` 每项必须是包含非空 `name`
+string 与 `required` boolean 的对象；缺失字段、显式 `null` 或其他已知类型错误均
+拒绝。
 可选 section 与 `plugins` 的缺失和显式空 object 按 `docs/design.md` 的模型保留。
 目录查询不会因为 `Supports` 结果而改变其他命令的错误或 Delivery 语义。
 

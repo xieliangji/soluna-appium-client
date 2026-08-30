@@ -267,17 +267,14 @@ type ExecuteMethod struct {
 
 type HTTPCommandGroup struct {
     Entries []HTTPCommand
-    Extra   map[string]any
 }
 
 type BiDiCommandGroup struct {
     Entries []BiDiCommand
-    Extra   map[string]any
 }
 
 type ExecuteMethodGroup struct {
     Entries []ExecuteMethod
-    Extra   map[string]any
 }
 
 type CommandCatalog struct {
@@ -289,14 +286,14 @@ type CommandCatalog struct {
 type RestCommandCatalog struct {
     Base    HTTPCommandGroup
     Driver  HTTPCommandGroup
-    Plugins map[string]*HTTPCommandGroup
+    Plugins map[string]HTTPCommandGroup
     Extra   map[string]any
 }
 
 type BiDiCommandCatalog struct {
     Base    BiDiCommandGroup
     Driver  BiDiCommandGroup
-    Plugins map[string]*BiDiCommandGroup
+    Plugins map[string]BiDiCommandGroup
     Extra   map[string]any
 }
 
@@ -307,7 +304,7 @@ type ExtensionCatalog struct {
 
 type RestExtensionCatalog struct {
     Driver  ExecuteMethodGroup
-    Plugins map[string]*ExecuteMethodGroup
+    Plugins map[string]ExecuteMethodGroup
     Extra   map[string]any
 }
 ```
@@ -335,17 +332,18 @@ section：nil 表示响应中缺失，非 nil 的空结构表示远端明确返�
 两者不得混淆；section 若出现则必须是 JSON object，显式 `null` 或其他类型非法。
 只要 section 存在，其 `Base` 与 `Driver` 就是必需的 JSON object；缺失任一字段
 属于响应格式错误，显式空 object 则合法。`Plugins` 可缺失；其 map 的 nil 表示
-缺失，非 nil 空 map 表示显式空 object，显式 `null` 或其他类型非法。Commands
-不要求 Rest 或 BiDi 至少有一个存在；Extensions 不要求 Rest 存在，因此空顶层
-object 是合法的空目录，但 `{"rest":{}}`、`{"bidi":{}}` 或 Extensions 的
-`{"rest":{}}` 均非法。
+缺失，非 nil 空 map 表示显式空 object；`plugins` 中每个 plugin value 必须是
+JSON object，显式 `null` 或其他类型非法。Commands 不要求 Rest 或 BiDi 至少有一
+个存在；Extensions 不要求 Rest 存在，因此空顶层 object 是合法的空目录，但
+`{"rest":{}}`、`{"bidi":{}}` 或 Extensions 的 `{"rest":{}}` 均非法。
 
 动态 path、method、domain、command name 和 execute method name 是已知结构键，
-由 DP-041 展开为对应 Group 的 Entries；未知字段保存在目录、section、group、
-条目 `CatalogMetadata.Extra` 或参数 `Extra` 中，并对嵌套 map/slice 递归深拷贝。
-目录返回不承诺 map 键顺序；客户端不依赖顺序，也不去重。无法解码为预期层级、
-必需 section child 缺失、已知元数据或参数字段类型错误，或结构性标识符为空时，
-整体返回 `CodeResponseInvalid`，不返回部分目录。
+由 DP-041 展开为对应 Group 的 Entries；这些动态 key 全部属于协议 identity，不能
+另行归入 Group 的未知字段。未知字段保存在目录、section、条目
+`CatalogMetadata.Extra` 或参数 `Extra` 中，并对嵌套 map/slice 递归深拷贝。目录
+返回不承诺 map 键顺序；客户端不依赖顺序，也不去重。无法解码为预期层级、必需
+section child 缺失、已知元数据或参数字段类型错误，或结构性标识符为空时，整体
+返回 `CodeResponseInvalid`，不返回部分目录。
 
 `Session.Commands(ctx)` 和 `Session.Extensions(ctx)` 每次分别读取
 `GET /session/{id}/appium/commands` 与

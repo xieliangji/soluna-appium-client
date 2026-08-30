@@ -78,10 +78,11 @@ Runtime Discovery 目录：
 section 和未知字段遵循 `docs/design.md` 的 Catalog 模型。Commands 的 `rest` /
 `bidi` 与 Extensions 的 `rest` section 都可缺失；缺失与显式空 object 必须区分。
 只要 section 存在，Commands 的 `base`、`driver` 或 Extensions 的 `driver` 就
-必须存在且为 JSON object；这些 object 可以为空，`plugins` 则可缺失。因而顶层
-`{}` 合法，而 `{"rest":{}}`、`{"bidi":{}}` 及 Extensions 的 `{"rest":{}}`
-非法。Params 是对象数组，每项必须包含非空 string `name` 与 boolean `required`，
-并保留缺失与显式空数组的差异。HTTP、BiDi、Execute Method 分别按
+必须存在且为 JSON object；这些 object 可以为空，`plugins` 则可缺失。`plugins`
+存在时必须是 object，且每个 plugin value 也必须是 object；显式 `null` 或其他
+类型非法。因而顶层 `{}` 合法，而 `{"rest":{}}`、`{"bidi":{}}` 及 Extensions
+的 `{"rest":{}}` 非法。Params 是对象数组，每项必须包含非空 string `name` 与
+boolean `required`，并保留缺失与显式空数组的差异。HTTP、BiDi、Execute Method 分别按
 `method+path`、`domain+name`、`name` 精确匹配；Source 仅记录 provenance，不参与
 Supports 查询。非法目录结构、空的结构性标识符、必需 child 缺失或无法解码的
 已知字段返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。本节定义
