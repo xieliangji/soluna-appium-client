@@ -103,8 +103,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | CORE-005 | `Session.Close` 与创建失败清理 | Session method | Implemented | W3C Delete Session | Appium 3 | Protocol | `session.go`, `session_test.go` |
 | CFG-001 | 设置 Script/PageLoad/Implicit Timeout | Session method | Implemented | W3C Timeouts | Driver 可能忽略不适用字段 | Protocol | `timeouts.go`, `timeouts_test.go` |
 | CFG-002 | 读取当前 Timeouts | Session method (`CurrentTimeouts`) | Implemented | Appium 3 Get Timeouts (`command` / `implicit`) | 字段必须存在；值严格校验整数毫秒、非负和 `time.Duration` 溢出，拒绝 `null`；保留既有 `Timeouts` 设置类型 | Protocol | `timeouts.go`, `timeouts_test.go`, `docs/command-semantics.md` |
-| CFG-003 | 读取 Session Settings | Session method | Accepted | Appium `GET /appium/settings` | Setting 键值由 Driver/Plugin 定义 | None | 增加 `Settings` 开放类型 |
-| CFG-004 | 增量更新 Session Settings | Session method | Accepted | Appium `POST /appium/settings` | 不缓存远端状态 | None | 增加 `UpdateSettings` |
+| CFG-003 | 读取 Session Settings | Session method (`Settings`) | Implemented | Appium `GET /session/{id}/appium/settings` | 返回值必须是 JSON object；键值由 Driver/Plugin 定义；每次远端读取并返回深拷贝 | Protocol | `settings.go`, `settings_test.go`, `docs/command-semantics.md` |
+| CFG-004 | 增量更新 Session Settings | Session method (`UpdateSettings`) | Implemented | Appium `POST /session/{id}/appium/settings` | 只发送明确字段；不缓存、不维护白名单；nil Settings 在发送前拒绝 | Protocol | `settings.go`, `settings_test.go`, `docs/command-semantics.md` |
 | DISC-001 | 读取 Command Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | 增加 `Session.Commands` |
 | DISC-002 | 读取 Extension Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | 增加 `Session.Extensions` |
 | DISC-003 | Catalog 本地 `Supports` helper | Session method | Accepted | 纯本地快照查询 | 不能视为执行成功保证 | None | 先固定 Catalog 类型 |

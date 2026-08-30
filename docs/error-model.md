@@ -31,6 +31,14 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `pageLoad`。用于设置超时的既有 `Timeouts` 公共类型保持 `Script`、`PageLoad`
 和 `Implicit` 字段，不因读取结果模型改变。
 
+## Settings 响应与参数错误
+
+`Session.Settings` 的成功 value 必须是 JSON object；`null`、数组、字符串或
+其他非法 JSON 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
+`Session.UpdateSettings` 收到 nil `Settings` 时在发送请求前返回
+`CodeInvalidArgument`，Delivery 为 `DeliveryNotSent`；远端返回非 null 成功值时
+同样返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
+
 ## Delivery
 
 - `DeliveryNotSent`：调用方 context 已结束、参数无效或请求构造失败，

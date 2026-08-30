@@ -43,3 +43,21 @@ JSON object；字段值必须是非负整数毫秒。零是有效值，字段缺
 `script`、`pageLoad`、`implicit` 字段不承诺会从该读取命令中原样返回。
 用于设置超时的既有 `Timeouts` 类型仍保留 `Script`、`PageLoad` 和 `Implicit`
 字段；读取结果的 `Command`、`Implicit` 不会改变该公共类型的语义。
+
+## Session Settings
+
+`Session.Settings` 和 `Session.UpdateSettings` 使用 Appium Session Settings
+命令：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Session.Settings` | GET | `/session/{sessionId}/appium/settings` | 无 | JSON object |
+| `Session.UpdateSettings` | POST | `/session/{sessionId}/appium/settings` | JSON object（增量字段） | `null` |
+
+`Settings` 是开放的 `map[string]any`；键和值由 Driver 或 Plugin 定义。
+客户端不维护白名单、不自动规范化值，也不把更新后的状态写入本地缓存。
+GET 每次读取远端并返回独立的深拷贝。空的非 nil `Settings` 会发送 `{}`；nil
+Settings 不是 JSON object，在请求发送前返回 `CodeInvalidArgument`。
+
+GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
+返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。

@@ -701,14 +701,14 @@ func cloneCapabilities(
 	cloned := make(Capabilities, len(source))
 
 	for key, value := range source {
-		cloned[key] = cloneCapabilityValue(value)
+		cloned[key] = cloneJSONValue(value)
 	}
 
 	return cloned
 }
 
-// cloneCapabilityValue 深拷贝 JSON Capability 值.
-func cloneCapabilityValue(value any) any {
+// cloneJSONValue 深拷贝 JSON 对象中的可变值。
+func cloneJSONValue(value any) any {
 	switch current := value.(type) {
 	case map[string]any:
 		cloned := make(
@@ -717,7 +717,7 @@ func cloneCapabilityValue(value any) any {
 		)
 
 		for key, child := range current {
-			cloned[key] = cloneCapabilityValue(child)
+			cloned[key] = cloneJSONValue(child)
 		}
 
 		return cloned
@@ -726,7 +726,7 @@ func cloneCapabilityValue(value any) any {
 		cloned := make([]any, len(current))
 
 		for index, child := range current {
-			cloned[index] = cloneCapabilityValue(child)
+			cloned[index] = cloneJSONValue(child)
 		}
 
 		return cloned

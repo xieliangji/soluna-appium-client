@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-020`（已完成；下一项需显式选择）
+> 当前计划项：`DP-030`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -22,7 +22,7 @@
 |---:|---|---|---|---|
 | 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Done | — |
 | 2 | `DP-020` 读取 Timeouts | `CFG-002` | Done | — |
-| 3 | `DP-030` Session Settings | `CFG-003..004` | Queued | — |
+| 3 | `DP-030` Session Settings | `CFG-003..004` | Done | — |
 | 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Queued | — |
 | 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Queued | DP-040 |
 | 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Queued | — |
@@ -78,7 +78,7 @@
 ### DP-030 Session Settings
 
 - 实现 `Session.Settings`、`Session.UpdateSettings` 和开放 `Settings` 类型。
-- 深拷贝返回值及需要保留的输入；更新只发送明确字段。
+- 返回独立的深拷贝，更新只发送调用方明确提供的增量字段。
 - 不缓存、不 normalize、不维护 Driver setting 白名单。
 - 排除平台强类型 setting helper。
 

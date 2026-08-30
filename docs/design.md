@@ -205,6 +205,11 @@ uiautomator2/driver.go
 | Settings | Session 中可变的 Driver/Plugin 状态 | 不缓存；更新结果不确定时不推测最终状态 |
 | Command/Extension Catalog | 查询时刻远端登记的能力快照 | 显式读取，不建立隐式 Session 缓存 |
 
+Session Settings 使用开放的 `Settings map[string]any` 表达 Driver/Plugin 定义的
+键值。`GET /session/{id}/appium/settings` 每次读取并返回独立快照；
+`POST /session/{id}/appium/settings` 只发送调用方提供的增量字段。客户端不维护
+Setting 白名单、不自动规范化值，也不根据一次更新推测后续读取结果。
+
 Runtime Discovery 只回答“当前 Session 登记了什么”，不能推导：
 
 - 当前设备 OS 满足命令最低版本；
