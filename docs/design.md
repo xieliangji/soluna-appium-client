@@ -453,6 +453,15 @@ Driver 返回的 scale、status bar、orientation 等只作为坐标转换的辅
 
 `ViewportRect` 属于截图像素空间，不替换 `WindowRect` 参与 Element 查找或 Actions。
 
+`DP-060` 已将该边界细化在 [`docs/coordinate-system.md`](coordinate-system.md)：
+`Rect`/`Point` 保持 WebDriver 几何语义，`PixelRect` 使用整数截图像素语义；
+XCUITest 和 UiAutomator2 的 `mobile: viewportRect` 结果按各自 Driver 的事实
+承载，不由客户端再次应用 scale、density、status bar 或 orientation 变换。
+`Session.ViewportRect` 由 DP-061 通过根包统一 Execute Script 链实现；SDK 每次
+发起读取且不缓存返回值，严格校验非负原点、正面积、整数表示和端点溢出。Driver
+内部可能缓存基础屏幕事实，刷新时机以远端实现为准。该结果不会进入现有 Native
+Find/Tap，也不为 Web Context 的 DOM 几何提供等价保证。
+
 ## 9. 大型响应与二进制产物
 
 Page Source、Screenshot、Element Screenshot、Recording、Pull Logs 和 BiDi Event 使用独立资源类别，不能全部复用普通命令响应上限。
@@ -631,7 +640,6 @@ internal/bidi       BiDi 协议实现
 - WebDriver BiDi 公共订阅接口及背压模型；
 - Pull Log 的公共 Entry 类型与时间字段；
 - Streaming Log 与平台监控事件的公共/平台类型边界；
-- Viewport 与 Screenshot 像素坐标的验证方法；
 - Runtime Discovery Catalog 的稳定 Go 类型。
 
 专题完成后应更新本文档对应章节，并在 `docs/command-semantics.md` 中记录最终命令契约。
@@ -666,6 +674,7 @@ internal/bidi       BiDi 协议实现
 | AD-022 | Accepted | SDK 只公开根包 `appium.Client`；平台包不定义 Client 或 Session wrapper | 调用方始终使用同一 Client/Session 对象模型 |
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
 | AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
+| AD-025 | Accepted | ViewportRect 使用独立的截图像素 `PixelRect`；Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver 几何与图像几何混用，并把跨 Driver 的像素验证留给显式兼容性流程 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

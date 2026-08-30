@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-051`（已完成；下一项需显式选择）
+> 当前计划项：`DP-060`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -27,7 +27,7 @@
 | 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Done | DP-040 |
 | 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Done | — |
 | 7 | `DP-051` Element Screenshot | `ELM-006..007` | Done | DP-050 |
-| 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Queued | — |
+| 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Done | — |
 | 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Queued | DP-060 |
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Queued | — |
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Queued | DP-070 |
@@ -132,6 +132,14 @@ Execute Method 三类 execution identity，并固定 Source provenance、`params
 - orientation、status bar、scale 的事实边界；
 - 数值校验；
 - `ViewportRect` 不参与现有 Find/Tap。
+
+已固定两个坐标空间及其公共类型边界：`Rect`/`Point` 继续表示 WebDriver
+几何，`PixelRect` 表示整数截图像素；XCUITest 与 UiAutomator2 的
+`mobile: viewportRect` 结果由 Driver 负责选择单位，客户端只做严格承载和
+数值校验。已明确 SDK 每次发起读取且不缓存返回值、通过根包统一 Execute Script
+链执行，以及 orientation、status bar、scale/density 不触发隐式转换；Driver
+内部基础事实的缓存和刷新时机仍由远端实现决定。已记录与
+Screenshot 的像素验证流程、错误/Delivery 边界和未来 DP-061 的实现输入。
 
 排除运行时代码和自动坐标转换。
 

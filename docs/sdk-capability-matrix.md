@@ -132,7 +132,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | VIS-003 | `Session.ScreenshotTo(io.Writer)` | Session method | Implemented | 流式 Base64 解码 | 返回已写入字节数；共享 Screenshot 上限 | Protocol | `screenshot.go`, `screenshot_test.go` |
 | VIS-004 | Screenshot 专用资源上限 | Client option | Implemented | Client Limits | Session/Element Screenshot 共用 | Protocol | `limits.go`, `client.go`, `screenshot_test.go`, `element_screenshot_test.go` |
 | VIS-005 | `Session.PageSource` | Session method | Implemented | W3C Page Source | 独立 Page Source 上限 | Protocol | `session.go`, `session_inspection_test.go` |
-| VIS-006 | `Session.ViewportRect` / `PixelRect` | Session method | Accepted | Appium mobile viewport rect | 图像像素坐标，不参与 Element Tap | None | 先补 `coordinate-system.md` |
+| VIS-006 | `Session.ViewportRect` / `PixelRect` | Session method | Accepted | Appium mobile viewport rect | 图像像素坐标；不参与 Element Find/Tap；不执行隐式 scale、status bar 或 orientation 转换 | None | DP-060 已完成 `docs/coordinate-system.md`；DP-061 实现并补协议测试 |
 | VIS-007 | Viewport Screenshot | Session method | Deferred | Driver 截图后裁剪 | Driver/Host 图像依赖不同 | None | 先使用 Screenshot + ViewportRect |
 | VIS-008 | 隐式坐标缩放或自动转换 | Internal / test infrastructure | Excluded | Client-side transform | 缺少完整方向/状态栏/Context 模型 | None | 只报告事实，不静默转换 |
 
