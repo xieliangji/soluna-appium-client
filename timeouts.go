@@ -23,21 +23,20 @@ const (
 // Timeouts 表示 Appium Get Timeouts 返回的当前超时配置。
 //
 // Command 表示 Appium 当前 command timeout，Implicit 表示元素查找使用的
-// implicit timeout。指针为 nil 表示远端明确返回了 JSON null；非 nil 值
-// 使用 Go 的 time.Duration 表示。该类型不包含 SetTimeout 请求中的
+// implicit timeout，均使用 Go 的 time.Duration 表示。该类型不包含 SetTimeout 请求中的
 // Script/PageLoad 字段，因为 Appium 3 的 Get Timeouts 响应不返回它们。
 type Timeouts struct {
-	// Command 表示 Appium command timeout；nil 表示远端返回 null。
-	Command *time.Duration
+	// Command 表示 Appium command timeout。
+	Command time.Duration
 
-	// Implicit 表示元素查找使用的隐式等待超时时间；nil 表示远端返回 null。
-	Implicit *time.Duration
+	// Implicit 表示元素查找使用的隐式等待超时时间。
+	Implicit time.Duration
 }
 
 // Timeouts 获取当前 Session 的 Appium command 和 implicit 超时配置。
 //
-// 远端返回值必须包含 command 和 implicit 字段。字段值可以是非负整数毫秒
-// 或显式 null；整数值必须能够安全转换为 time.Duration。方法每次调用都会
+// 远端返回值必须包含 command 和 implicit 字段。字段值必须是非负整数毫秒，
+// 且能够安全转换为 time.Duration。方法每次调用都会
 // 读取远端结果，不缓存之前的响应。
 func (s *Session) Timeouts(ctx context.Context) (Timeouts, error) {
 	client, err := s.commandClient(getTimeoutsOperation)
@@ -251,7 +250,7 @@ func decodeTimeouts(
 		return Timeouts{}, fmt.Errorf("decode timeouts response: %w", err)
 	}
 
-	command, err := decodeNullableTimeoutDuration(
+	command, err := decodeTimeoutDuration(
 		ctx,
 		"command",
 		payload.Command,
@@ -260,7 +259,7 @@ func decodeTimeouts(
 		return Timeouts{}, err
 	}
 
-	implicit, err := decodeNullableTimeoutDuration(
+	implicit, err := decodeTimeoutDuration(
 		ctx,
 		"implicit",
 		payload.Implicit,
@@ -275,37 +274,36 @@ func decodeTimeouts(
 	}, nil
 }
 
-// decodeNullableTimeoutDuration 将一个可空整数毫秒 JSON 字段转换为 time.Duration。
-func decodeNullableTimeoutDuration(
+// decodeTimeoutDuration 将一个整数毫秒 JSON 字段转换为 time.Duration。
+func decodeTimeoutDuration(
 	ctx context.Context,
 	field string,
 	value json.RawMessage,
-) (*time.Duration, error) {
+) (time.Duration, error) {
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return 0, err
 	}
 	if len(value) == 0 {
-		return nil, fmt.Errorf("timeouts response does not contain %s", field)
+		return 0, fmt.Errorf("timeouts response does not contain %s", field)
 	}
 	if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		return nil, nil
+		return 0, fmt.Errorf("timeouts response field %s is null", field)
 	}
 
 	var millis int64
 	if err := json.Unmarshal(value, &millis); err != nil {
-		return nil, fmt.Errorf("decode timeouts %s milliseconds: %w", field, err)
+		return 0, fmt.Errorf("decode timeouts %s milliseconds: %w", field, err)
 	}
 	if millis < 0 {
-		return nil, fmt.Errorf("timeouts response field %s is negative", field)
+		return 0, fmt.Errorf("timeouts response field %s is negative", field)
 	}
 	if millis > math.MaxInt64/int64(time.Millisecond) {
-		return nil, errors.New("timeouts response value overflows time.Duration")
+		return 0, errors.New("timeouts response value overflows time.Duration")
 	}
 
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	duration := time.Duration(millis) * time.Millisecond
-	return &duration, nil
+	return time.Duration(millis) * time.Millisecond, nil
 }

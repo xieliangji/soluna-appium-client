@@ -344,14 +344,14 @@ func TestSessionTimeoutsProtocolAndNoCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read first timeouts: %v", err)
 	}
-	if first.Command == nil || *first.Command != 12345*time.Millisecond || first.Implicit == nil || *first.Implicit != 2500*time.Millisecond {
+	if first.Command != 12345*time.Millisecond || first.Implicit != 2500*time.Millisecond {
 		t.Fatalf("unexpected first timeouts: %#v", first)
 	}
 	second, err := session.Timeouts(context.Background())
 	if err != nil {
 		t.Fatalf("read second timeouts: %v", err)
 	}
-	if second.Command == nil || *second.Command != 2*time.Millisecond || second.Implicit == nil || *second.Implicit != 3*time.Millisecond {
+	if second.Command != 2*time.Millisecond || second.Implicit != 3*time.Millisecond {
 		t.Fatalf("unexpected second timeouts: %#v", second)
 	}
 	if requestCount != 2 {
@@ -370,6 +370,8 @@ func TestSessionTimeoutsRejectInvalidResponses(t *testing.T) {
 		response string
 	}{
 		{name: "missing field", response: `{"value":{"command":1}}`},
+		{name: "command null", response: `{"value":{"command":null,"implicit":2}}`},
+		{name: "implicit null", response: `{"value":{"command":1,"implicit":null}}`},
 		{name: "negative", response: `{"value":{"command":-1,"implicit":2}}`},
 		{name: "fractional", response: `{"value":{"command":1.5,"implicit":2}}`},
 		{name: "duration overflow", response: `{"value":{"command":9223372036855,"implicit":2}}`},
@@ -385,20 +387,6 @@ func TestSessionTimeoutsRejectInvalidResponses(t *testing.T) {
 				t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
 			}
 		})
-	}
-}
-
-func TestSessionTimeoutsAllowsNullValues(t *testing.T) {
-	session, _ := newTimeoutTestSession(t, `{"value":{"command":null,"implicit":0}}`)
-	timeouts, err := session.Timeouts(context.Background())
-	if err != nil {
-		t.Fatalf("read timeouts: %v", err)
-	}
-	if timeouts.Command != nil {
-		t.Fatalf("expected nil command timeout, got %v", *timeouts.Command)
-	}
-	if timeouts.Implicit == nil || *timeouts.Implicit != 0 {
-		t.Fatalf("expected zero implicit timeout, got %v", timeouts.Implicit)
 	}
 }
 
