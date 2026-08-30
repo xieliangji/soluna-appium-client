@@ -62,7 +62,7 @@
 ### DP-010 标准 Alert
 
 - 实现 `Session.AlertText`、`AcceptAlert`、`DismissAlert`、`SetAlertText`。
-- 使用标准 W3C Alert 命令并严格解码文本与 null。
+- 使用标准 W3C Alert 命令并严格解码文本与 null；`AlertText` 以 `hasText` 区分空字符串和缺失文本。
 - `no such alert` 映射为独立的 `CodeAlertNotFound`，因为该 W3C 错误明确表示 Alert 资源不存在，调用方可据此区分通用命令失败。
 - 覆盖协议、错误、Delivery 和本地失败零远端请求。
 - 排除 `HasAlert`、按 label 处理、自动等待和自动重试。

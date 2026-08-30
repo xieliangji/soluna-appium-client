@@ -52,9 +52,12 @@ func TestAlertProtocol(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	text, err := session.AlertText(context.Background())
+	text, hasText, err := session.AlertText(context.Background())
 	if err != nil {
 		t.Fatalf("get alert text: %v", err)
+	}
+	if !hasText {
+		t.Fatal("expected alert text to be present")
 	}
 	if text != "Confirm?" {
 		t.Fatalf("unexpected alert text: %q", text)
@@ -75,24 +78,30 @@ func TestAlertProtocol(t *testing.T) {
 	}
 
 	assertAlertRequest(t, requests[1], http.MethodGet, "/session/session%2Fid/alert/text", nil)
-	assertAlertRequest(t, requests[2], http.MethodPost, "/session/session%2Fid/alert/accept", nil)
-	assertAlertRequest(t, requests[3], http.MethodPost, "/session/session%2Fid/alert/dismiss", nil)
+	assertAlertRequest(t, requests[2], http.MethodPost, "/session/session%2Fid/alert/accept", map[string]any{})
+	assertAlertRequest(t, requests[3], http.MethodPost, "/session/session%2Fid/alert/dismiss", map[string]any{})
 	assertAlertRequest(t, requests[4], http.MethodPost, "/session/session%2Fid/alert/text", map[string]any{"text": "Proceed"})
 }
 
-func TestAlertTextRejectsNullAndInvalidValues(t *testing.T) {
-	for _, response := range []string{`{"value":null}`, `{"value":123}`} {
-		t.Run(response, func(t *testing.T) {
-			recorder := contracttest.NewRecorder(
-				http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-					writer.Header().Set("Content-Type", "application/json")
-					if request.RequestURI == "/session" {
-						_, _ = writer.Write([]byte(`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`))
-						return
-					}
-					_, _ = writer.Write([]byte(response))
-				}),
-			)
+func TestAlertTextAllowsNullAndEmptyString(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		value   string
+		text    string
+		hasText bool
+	}{
+		{name: "null", value: `{"value":null}`, hasText: false},
+		{name: "empty string", value: `{"value":""}`, text: "", hasText: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recorder := contracttest.NewRecorder(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+				writer.Header().Set("Content-Type", "application/json")
+				if request.RequestURI == "/session" {
+					_, _ = writer.Write([]byte(`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`))
+					return
+				}
+				_, _ = writer.Write([]byte(test.value))
+			}))
 			server := contracttest.NewServer(recorder)
 			t.Cleanup(server.Close)
 			client, err := server.NewClient(appium.ClientOptions{})
@@ -100,21 +109,49 @@ func TestAlertTextRejectsNullAndInvalidValues(t *testing.T) {
 				t.Fatalf("create client: %v", err)
 			}
 			session, err := client.CreateSession(context.Background(), appium.MatchCapabilities(appium.Capabilities{
-				"platformName":          "iOS",
-				"appium:automationName": "XCUITest",
+				"platformName": "iOS", "appium:automationName": "XCUITest",
 			}))
 			if err != nil {
 				t.Fatalf("create session: %v", err)
 			}
-
-			_, err = session.AlertText(context.Background())
-			if err == nil || !appium.IsErrorCode(err, appium.CodeResponseInvalid) {
-				t.Fatalf("expected response invalid error, got %v", err)
+			text, hasText, err := session.AlertText(context.Background())
+			if err != nil {
+				t.Fatalf("get alert text: %v", err)
 			}
-			if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
-				t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
+			if text != test.text || hasText != test.hasText {
+				t.Fatalf("unexpected alert text result: text=%q hasText=%v", text, hasText)
 			}
 		})
+	}
+}
+
+func TestAlertTextRejectsInvalidValue(t *testing.T) {
+	recorder := contracttest.NewRecorder(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.RequestURI == "/session" {
+			_, _ = writer.Write([]byte(`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`))
+			return
+		}
+		_, _ = writer.Write([]byte(`{"value":123}`))
+	}))
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+	client, err := server.NewClient(appium.ClientOptions{})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	session, err := client.CreateSession(context.Background(), appium.MatchCapabilities(appium.Capabilities{
+		"platformName": "iOS", "appium:automationName": "XCUITest",
+	}))
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	_, _, err = session.AlertText(context.Background())
+	if err == nil || !appium.IsErrorCode(err, appium.CodeResponseInvalid) {
+		t.Fatalf("expected response invalid error, got %v", err)
+	}
+	if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
+		t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
 	}
 }
 
@@ -172,7 +209,7 @@ func TestAlertNoSuchAlertMapsToDedicatedError(t *testing.T) {
 		t.Fatalf("create session: %v", err)
 	}
 
-	_, err = session.AlertText(context.Background())
+	_, _, err = session.AlertText(context.Background())
 	if err == nil || !appium.IsErrorCode(err, appium.CodeAlertNotFound) {
 		t.Fatalf("expected alert not found error, got %v", err)
 	}
@@ -203,7 +240,7 @@ func TestAlertLocalFailureDoesNotSendRemoteRequest(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := session.AlertText(ctx); err == nil || !appium.IsErrorCode(err, appium.CodeCanceled) {
+	if _, _, err := session.AlertText(ctx); err == nil || !appium.IsErrorCode(err, appium.CodeCanceled) {
 		t.Fatalf("expected canceled error, got %v", err)
 	}
 	if err := session.AcceptAlert(ctx); err == nil || !appium.IsErrorCode(err, appium.CodeCanceled) {
@@ -228,9 +265,18 @@ func assertAlertRequest(t *testing.T, request contracttest.RecordedRequest, meth
 		}
 		return
 	}
+	if contentType := request.Header.Get("Content-Type"); contentType != "application/json" {
+		t.Fatalf("expected JSON content type, got %q", contentType)
+	}
 	var decoded map[string]any
 	if err := json.Unmarshal(request.Body, &decoded); err != nil {
 		t.Fatalf("decode request body: %v", err)
+	}
+	if len(body) == 0 {
+		if len(decoded) != 0 {
+			t.Fatalf("expected empty JSON object, got %#v", decoded)
+		}
+		return
 	}
 	if decoded["text"] != body["text"] {
 		t.Fatalf("unexpected request body: %#v", decoded)

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 
 	"github.com/xieliangji/soluna-appium-client/internal/codec"
@@ -20,12 +19,14 @@ const (
 
 // AlertText 获取当前 Alert 的文本。
 //
-// 远端响应值必须是 JSON 字符串；如果当前没有 Alert，
-// 远端通常会返回 no such alert 错误。客户端不会自动等待 Alert 出现。
-func (s *Session) AlertText(ctx context.Context) (string, error) {
+// 远端响应值可以是 JSON 字符串或 null。返回值中的 hasText 为 true
+// 表示远端返回了字符串（包括空字符串），false 表示远端返回了 null。
+// 如果当前没有 Alert，远端通常会返回 no such alert 错误。
+// 客户端不会自动等待 Alert 出现。
+func (s *Session) AlertText(ctx context.Context) (text string, hasText bool, err error) {
 	client, err := s.commandClient(getAlertTextOperation)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	command, err := wire.NewCommand(
@@ -37,14 +38,14 @@ func (s *Session) AlertText(ctx context.Context) (string, error) {
 		"text",
 	)
 	if err != nil {
-		return "", commandDefinitionError(
+		return "", false, commandDefinitionError(
 			getAlertTextOperation,
 			"get alert text command definition is invalid",
 			err,
 		)
 	}
 
-	var text string
+	var hasTextResult bool
 	err = client.executeCommand(
 		ctx,
 		command,
@@ -52,19 +53,20 @@ func (s *Session) AlertText(ctx context.Context) (string, error) {
 		client.commandTimeout,
 		client.limits.MaxResponseBytes,
 		func(ctx context.Context, value json.RawMessage) error {
-			decoded, decodeErr := decodeAlertText(ctx, value)
+			decoded, present, decodeErr := decodeAlertText(ctx, value)
 			if decodeErr != nil {
 				return decodeErr
 			}
 			text = decoded
+			hasTextResult = present
 			return nil
 		},
 	)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 
-	return text, nil
+	return text, hasTextResult, nil
 }
 
 // AcceptAlert 接受当前 Alert。
@@ -75,7 +77,7 @@ func (s *Session) AcceptAlert(ctx context.Context) error {
 		ctx,
 		acceptAlertOperation,
 		http.MethodPost,
-		nil,
+		struct{}{},
 	)
 }
 
@@ -87,7 +89,7 @@ func (s *Session) DismissAlert(ctx context.Context) error {
 		ctx,
 		dismissAlertOperation,
 		http.MethodPost,
-		nil,
+		struct{}{},
 	)
 }
 
@@ -164,19 +166,23 @@ func alertCommandPath(operation string) string {
 
 // decodeAlertText 严格解码 Alert 文本响应。
 //
-// W3C Alert Text 的成功值必须是 JSON 字符串；显式 null 不视为
-// 空字符串，以避免把无效响应误认为有效文本。
+// W3C Alert Text 的成功值必须是 JSON 字符串或显式 null。
 func decodeAlertText(
 	ctx context.Context,
 	value json.RawMessage,
-) (string, error) {
+) (string, bool, error) {
 	if err := ctx.Err(); err != nil {
-		return "", err
+		return "", false, err
 	}
 
 	if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		return "", errors.New("WebDriver alert text response must be a string")
+		return "", false, nil
 	}
 
-	return codec.DecodeJSONString(ctx, value)
+	text, err := codec.DecodeJSONString(ctx, value)
+	if err != nil {
+		return "", false, err
+	}
+
+	return text, true, nil
 }

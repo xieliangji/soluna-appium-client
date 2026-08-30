@@ -143,9 +143,9 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ACT-001 | `PerformActions` / `ReleaseActions` | Session method | Implemented | W3C Touch Pointer Actions | Driver 必须支持 touch pointer | Protocol | `actions.go`, `actions_test.go` |
 | ACT-002 | `Tap` / `LongPress` / `Swipe` | Session method | Implemented | W3C Actions 封装 | viewport 坐标 | Protocol | `actions.go`, `actions_test.go` |
 | ACT-003 | 多指 ActionSequence | Session method | Implemented | 多个 W3C pointer source | 具体手势兼容性需实机验证 | Protocol | `actions.go`, `actions_test.go` |
-| ALERT-001 | Alert 文本 | Session method | Implemented | W3C Get Alert Text | `no such alert` 映射为 `CodeAlertNotFound`；成功值严格为 JSON string | Protocol | `alerts.go`, `alerts_test.go` |
-| ALERT-002 | Accept / Dismiss Alert | Session method | Implemented | W3C Alert commands | 不增加 `HasAlert` TOCTOU API；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go` |
-| ALERT-003 | Set Alert Text | Session method | Implemented | W3C Set Alert Text | 仅含输入框 Alert 有效；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go` |
+| ALERT-001 | Alert 文本 | Session method | Implemented | W3C Get Alert Text | `no such alert` 映射为 `CodeAlertNotFound`；成功值为 JSON string 或 `null`，通过 `hasText` 区分 | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
+| ALERT-002 | Accept / Dismiss Alert | Session method | Implemented | W3C Alert commands | 不增加 `HasAlert` TOCTOU API；POST 请求体为 JSON `{}`；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
+| ALERT-003 | Set Alert Text | Session method | Implemented | W3C Set Alert Text | 仅含输入框 Alert 有效；POST 请求体含 `text`；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
 | KBD-001 | Keyboard Shown | Session method | Accepted | Appium common command | Driver 探测实现不同 | None | 新增 `keyboard.go` |
 | KBD-002 | Dismiss Keyboard | Session method | Accepted | Appium common command | 需定义“尝试”与最终状态语义 | None | 先验证两 Driver 行为 |
 
