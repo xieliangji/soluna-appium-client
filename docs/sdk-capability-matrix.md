@@ -119,8 +119,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ELM-003 | `Element.Rect` / `Text` / `Attribute` | Element method | Implemented | W3C Element commands | Attribute 允许远端 `null` | Protocol | `element.go`, `element_test.go` |
 | ELM-004 | `Element.Clear` / `SendKeys` | Element method | Implemented | W3C Element commands | Driver 输入法行为不同 | Protocol | `element.go`, `element_test.go` |
 | ELM-005 | `Element.Tap` / `TapInWindowIntersection` | Element method | Implemented | Window/Element Rect + W3C Actions | 每次点击重新读取几何状态 | Protocol | `element.go`, `element_tap_test.go` |
-| ELM-006 | `Element.Screenshot` | Element method | Accepted | W3C Element Screenshot | 不承诺自动滚动或与本地裁剪等价 | None | DP-051 实现；复用 `screenshot.go` 的资源与解码边界 |
-| ELM-007 | `Element.ScreenshotTo(io.Writer)` | Element method | Accepted | 流式 Base64 解码 | 使用 Screenshot 专用上限 | None | DP-051 实现；复用 `screenshot.go` 的解码链 |
+| ELM-006 | `Element.Screenshot` | Element method | Implemented | W3C Element Screenshot | 不承诺自动滚动或与本地裁剪等价 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
+| ELM-007 | `Element.ScreenshotTo(io.Writer)` | Element method | Implemented | 流式 Base64 解码 | 使用 Screenshot 专用上限 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
 | ELM-008 | `Displayed` / `Enabled` / `Selected` | Element method | Excluded | Driver 状态查询 | 不能满足当前确定性语义要求 | None | 如未来重新引入需单独评审 |
 
 ### 5.3 视觉、页面与坐标
@@ -130,7 +130,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | VIS-001 | `Session.WindowRect` | Session method | Implemented | W3C Window Rect | WebDriver/Actions 坐标空间 | Protocol | `session.go`, `session_inspection_test.go` |
 | VIS-002 | `Session.Screenshot` | Session method | Implemented | W3C Screenshot + shared streaming decoder | 使用 Screenshot 专用响应上限 | Protocol | `screenshot.go`, `session_inspection_test.go`, `screenshot_test.go` |
 | VIS-003 | `Session.ScreenshotTo(io.Writer)` | Session method | Implemented | 流式 Base64 解码 | 返回已写入字节数；共享 Screenshot 上限 | Protocol | `screenshot.go`, `screenshot_test.go` |
-| VIS-004 | Screenshot 专用资源上限 | Client option | Implemented | Client Limits | Session/Element Screenshot 共用；Element Screenshot 待 DP-051 | Protocol | `limits.go`, `client.go`, `screenshot_test.go` |
+| VIS-004 | Screenshot 专用资源上限 | Client option | Implemented | Client Limits | Session/Element Screenshot 共用 | Protocol | `limits.go`, `client.go`, `screenshot_test.go`, `element_screenshot_test.go` |
 | VIS-005 | `Session.PageSource` | Session method | Implemented | W3C Page Source | 独立 Page Source 上限 | Protocol | `session.go`, `session_inspection_test.go` |
 | VIS-006 | `Session.ViewportRect` / `PixelRect` | Session method | Accepted | Appium mobile viewport rect | 图像像素坐标，不参与 Element Tap | None | 先补 `coordinate-system.md` |
 | VIS-007 | Viewport Screenshot | Session method | Deferred | Driver 截图后裁剪 | Driver/Host 图像依赖不同 | None | 先使用 Screenshot + ViewportRect |
@@ -220,7 +220,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 | INF-001 | 结构化 Error Code | Internal / test infrastructure | Implemented | Client error mapping | HTTP 路径已覆盖 | Protocol | `errors.go`, `command_error_test.go` |
 | INF-002 | Delivery State | Internal / test infrastructure | Implemented | wire response facts | 副作用命令不自动重试 | Protocol | `errors.go`, `command_delivery_test.go` |
 | INF-003 | 响应和远端错误大小限制 | Client option / callback | Implemented | `Limits` | Logs/BiDi 仍待扩展 | Protocol | `limits.go`, transport/codec tests |
-| INF-004 | Base64 流式解码 | Internal / test infrastructure | Implemented | `internal/codec` | 已用于 Recording 和 Screenshot | Unit/Protocol | `internal/codec`, `recording.go`, `screenshot.go` |
+| INF-004 | Base64 流式解码 | Internal / test infrastructure | Implemented | `internal/codec` | 已用于 Recording、Session Screenshot 和 Element Screenshot | Unit/Protocol | `internal/codec`, `recording.go`, `screenshot.go` |
 | INF-005 | HTTP Contract Test 工具 | Internal / test infrastructure | Implemented | `contracttest` | Test-only | Protocol | `contracttest/` |
 | INF-006 | BiDi Contract Test 工具 | Internal / test infrastructure | Architecture | Fake WebSocket/BiDi Server | Test-only | None | 与 BIDI-001 同步设计 |
 | INF-007 | SDK 能力矩阵维护 | Documentation | Implemented | 本文档 | 每个公共能力变更必须更新 | None | `docs/sdk-capability-matrix.md` |

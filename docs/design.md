@@ -418,7 +418,8 @@ Find 成功不代表后续 Tap 可以使用旧坐标。每次 Tap 都重新获�
 
 ### 7.4 Element Screenshot
 
-Element Screenshot 采用标准远端 Element Screenshot 语义，并同时规划内存返回和 `io.Writer` 两种交付方式。
+Element Screenshot 采用标准远端 Element Screenshot 语义，并提供内存返回和
+`io.Writer` 两种交付方式。
 
 该能力不承诺：
 
@@ -471,10 +472,10 @@ Page Source、Screenshot、Element Screenshot、Recording、Pull Logs 和 BiDi E
 
 Base64 解码、context 结束或 Writer 写入失败时，Writer 可能已经包含部分数据。流式方法必须同时返回已写入字节数和错误；其中 Writer 交付失败统一映射为 `CodeOutputFailed`，不与远端响应格式错误混淆。
 
-当前 Screenshot 使用 `Limits.MaxScreenshotResponseBytes` 作为独立资源上限，
-同时约束 HTTP 响应体读取和 Base64 解码后的截图数据；`Session.Screenshot`
-通过内存 Writer 复用 `Session.ScreenshotTo` 的完整解码路径。Element Screenshot
-尚未在本计划项中实现。
+当前 Session Screenshot 和 Element Screenshot 使用
+`Limits.MaxScreenshotResponseBytes` 作为独立资源上限，同时约束 HTTP 响应体
+读取和 Base64 解码后的截图数据。两者的便捷方法都通过对应的 `ScreenshotTo`
+复用完整解码路径；Session 与 Element 还共用同一套流式解码和输出错误映射。
 
 资源配置只在对应能力实现时加入公共 `Limits`，不提前暴露没有实际效果的字段。
 

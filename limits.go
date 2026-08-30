@@ -3,7 +3,7 @@ package soluna_appium_client
 const (
 	defaultMaxResponseBytes           int64 = 16 << 20  // 普通命令响应默认上限：16 MiB
 	defaultMaxPageSourceResponseBytes int64 = 96 << 20  // Page Source 响应默认上限：96 MiB
-	defaultMaxScreenshotResponseBytes int64 = 64 << 20  // Screenshot 响应默认上限：64 MiB
+	defaultMaxScreenshotResponseBytes int64 = 64 << 20  // Session/Element Screenshot 响应默认上限：64 MiB
 	defaultMaxRecordingResponseBytes  int64 = 256 << 20 // 录屏响应默认上限：256 MiB
 	defaultMaxRemoteErrorBytes        int64 = 64 << 10  // 远端错误数据默认上限：64 KiB
 )
@@ -19,7 +19,8 @@ type Limits struct {
 	// MaxPageSourceResponseBytes 表示 Page Source 命令允许读取的最大响应大小。
 	MaxPageSourceResponseBytes int64
 
-	// MaxScreenshotResponseBytes 表示 Screenshot 命令允许读取的最大响应大小。
+	// MaxScreenshotResponseBytes 表示 Session 或 Element Screenshot 命令允许
+	// 读取的最大响应大小，同时限制解码后的截图数据大小。
 	MaxScreenshotResponseBytes int64
 
 	// MaxRecordingResponseBytes 表示停止录屏时允许读取的最大响应大小。

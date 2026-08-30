@@ -82,10 +82,28 @@ string，内容必须是紧凑的标准 Base64；空字符串表示零字节截�
 `CodeResponseInvalid`；Writer 写入失败时返回 `CodeOutputFailed`，并保留原始
 Writer error 作为 Cause。任一错误发生时，目标中可能已经存在部分数据；调用方
 context 结束时返回相应的取消/截止时间错误。客户端不自动重试或恢复 Session。
-Element Screenshot、Viewport Screenshot 和本地裁剪不属于本命令契约。
+Viewport Screenshot 和本地裁剪不属于本命令契约。
 
 `StopRecordingTo` 使用相同的流式输出错误语义：录屏响应有效但目标 Writer
 失败时返回 `CodeOutputFailed`，而不是 `CodeResponseInvalid`。
+
+## Element Screenshot
+
+`Element.Screenshot` 和 `Element.ScreenshotTo` 使用 W3C Element Screenshot
+命令，并与 Session Screenshot 共用 Base64 解码、资源上限和错误语义：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Element.Screenshot` | GET | `/session/{sessionId}/element/{elementId}/screenshot` | 无 | 解码后的 PNG 字节 |
+| `Element.ScreenshotTo(io.Writer)` | GET | `/session/{sessionId}/element/{elementId}/screenshot` | 无 | 写入目标的解码后 PNG 字节数 |
+
+Session ID 和 Element ID 按 Endpoint 规则作为独立路径段转义。请求不带 body，
+也不发送 `Content-Type`。远端成功 value 必须是 JSON string，内容必须是紧凑的
+标准 Base64；空字符串表示零字节截图。响应体和解码后数据均使用
+`Limits.MaxScreenshotResponseBytes` 上限。
+
+Element Screenshot 只报告 Driver 的标准截图结果，不自动滚动元素、恢复可见性
+或处理 stale 引用，也不承诺与完整截图按 Element Rect 本地裁剪等价。
 
 ## Runtime Discovery（DP-041 实现契约）
 

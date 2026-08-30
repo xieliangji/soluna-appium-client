@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-050`（已完成；下一项需显式选择）
+> 当前计划项：`DP-051`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -26,7 +26,7 @@
 | 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Done | — |
 | 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Done | DP-040 |
 | 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Done | — |
-| 7 | `DP-051` Element Screenshot | `ELM-006..007` | Queued | DP-050 |
+| 7 | `DP-051` Element Screenshot | `ELM-006..007` | Done | DP-050 |
 | 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Queued | — |
 | 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Queued | DP-060 |
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Queued | — |

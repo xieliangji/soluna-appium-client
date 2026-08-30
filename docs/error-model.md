@@ -39,14 +39,19 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `CodeInvalidArgument`，Delivery 为 `DeliveryNotSent`；远端返回非 null 成功值时
 同样返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
-## Screenshot 响应与流式交付错误
+## Screenshot 与 Element Screenshot 响应及流式交付错误
 
-`Session.Screenshot` 与 `Session.ScreenshotTo` 共享 Screenshot 专用响应上限
+`Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与
+`Element.ScreenshotTo` 共享 Screenshot 专用响应上限
 `Limits.MaxScreenshotResponseBytes`。HTTP 响应体超过该上限时返回
 `CodeResponseTooLarge`，Delivery 为 `DeliveryAcknowledged`。成功 value 不是
 JSON string 或 Base64 格式不合法时返回 `CodeResponseInvalid`；Writer 写入失败
 时返回 `CodeOutputFailed`，Delivery 仍为 `DeliveryAcknowledged`，并通过 `Cause`
-保留原始 Writer error。`ScreenshotTo` 仍返回已经写入的字节数。
+保留原始 Writer error。两种 `ScreenshotTo` 仍返回已经写入的字节数。
+
+Element Screenshot 收到远端 `stale element reference`（映射为
+`CodeElementStale`）或其他 W3C 命令错误时，沿用统一远端错误映射和 Delivery
+语义；客户端不会自动重新定位或重试。
 
 nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
 `DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
