@@ -231,11 +231,17 @@ type CatalogSource struct {
     PluginName string // 仅 Kind == CatalogSourcePlugin 时有值
 }
 
+type CatalogParam struct {
+    Name     string
+    Required bool
+    Extra    map[string]any
+}
+
 type CatalogMetadata struct {
     Command    *string
     Deprecated *bool
     Info       *string
-    Params     []string
+    Params     []CatalogParam
     Extra      map[string]any
 }
 
@@ -281,15 +287,15 @@ type CommandCatalog struct {
 }
 
 type RestCommandCatalog struct {
-    Base    *HTTPCommandGroup
-    Driver  *HTTPCommandGroup
+    Base    HTTPCommandGroup
+    Driver  HTTPCommandGroup
     Plugins map[string]*HTTPCommandGroup
     Extra   map[string]any
 }
 
 type BiDiCommandCatalog struct {
-    Base    *BiDiCommandGroup
-    Driver  *BiDiCommandGroup
+    Base    BiDiCommandGroup
+    Driver  BiDiCommandGroup
     Plugins map[string]*BiDiCommandGroup
     Extra   map[string]any
 }
@@ -300,14 +306,14 @@ type ExtensionCatalog struct {
 }
 
 type RestExtensionCatalog struct {
-    Driver  *ExecuteMethodGroup
+    Driver  ExecuteMethodGroup
     Plugins map[string]*ExecuteMethodGroup
     Extra   map[string]any
 }
 ```
 
-HTTP command 的 identity 是 `Source + Path + Method`；BiDi command 的 identity
-是 `Source + Domain + Name`；Execute Method 的 identity 是 `Source + Name`。
+HTTP command 的 execution identity 是 `Method + Path`；BiDi command 的 execution
+identity 是 `Domain + Name`；Execute Method 的 execution identity 是 `Name`。
 `Command` 是远端条目的可选元数据，不能代替上述 identity；它缺失时仍是合法
 条目。Path、Method、Domain、Name 以及 plugin map key 是协议对象的结构性标识，
 必须非空并按原始字符串保存，不拼接、不 trim、不大小写折叠。
@@ -319,21 +325,27 @@ Source 不是远端条目里的自由字符串；未知的未来顶层 section �
 
 `CatalogMetadata` 的 `Command`、`Deprecated`、`Info` 和 `Params` 均为可选字段：
 字段缺失合法，显式空数组与缺失仍按 JSON 存在性区分；已知字段出现 `null` 或
-其他错误类型时视为响应格式错误。`Command` 即使缺失，也不会影响 HTTP、BiDi
-或 Execute Method 的结构性 identity。
+其他错误类型时视为响应格式错误。`Params` 中每个对象的 `Name` 和 `Required`
+是稳定字段，必须分别是非空 string 和 boolean；未知参数字段递归保存在该参数
+的 `Extra` 中。`Command` 即使缺失，也不会影响 HTTP、BiDi 或 Execute Method
+的结构性 identity。
 
 `CommandCatalog.Rest`、`CommandCatalog.BiDi` 和 `ExtensionCatalog.Rest` 为可选
 section：nil 表示响应中缺失，非 nil 的空结构表示远端明确返回了空 object，
-两者不得混淆。每个 section 内的 `Base`、`Driver` 和 `Plugins` 同样保留缺失与
-显式空 object 的区别；Plugins map 的 nil 表示缺失，非 nil 空 map 表示显式空
-object。Commands 不要求 Rest 或 BiDi 至少有一个存在；Extensions 不要求 Rest
-存在，因此空顶层 object 是合法的空目录。
+两者不得混淆；section 若出现则必须是 JSON object，显式 `null` 或其他类型非法。
+只要 section 存在，其 `Base` 与 `Driver` 就是必需的 JSON object；缺失任一字段
+属于响应格式错误，显式空 object 则合法。`Plugins` 可缺失；其 map 的 nil 表示
+缺失，非 nil 空 map 表示显式空 object，显式 `null` 或其他类型非法。Commands
+不要求 Rest 或 BiDi 至少有一个存在；Extensions 不要求 Rest 存在，因此空顶层
+object 是合法的空目录，但 `{"rest":{}}`、`{"bidi":{}}` 或 Extensions 的
+`{"rest":{}}` 均非法。
 
 动态 path、method、domain、command name 和 execute method name 是已知结构键，
-由 DP-041 展开为对应 Group 的 Entries；未知字段保存在目录、section 或条目
-`CatalogMetadata.Extra` 中，并对嵌套 map/slice 递归深拷贝。目录返回不承诺 map
-键顺序；客户端不依赖顺序，也不去重。无法解码为预期层级、已知元数据类型错误
-或结构性标识符为空时，整体返回 `CodeResponseInvalid`，不返回部分目录。
+由 DP-041 展开为对应 Group 的 Entries；未知字段保存在目录、section、group、
+条目 `CatalogMetadata.Extra` 或参数 `Extra` 中，并对嵌套 map/slice 递归深拷贝。
+目录返回不承诺 map 键顺序；客户端不依赖顺序，也不去重。无法解码为预期层级、
+必需 section child 缺失、已知元数据或参数字段类型错误，或结构性标识符为空时，
+整体返回 `CodeResponseInvalid`，不返回部分目录。
 
 `Session.Commands(ctx)` 和 `Session.Extensions(ctx)` 每次分别读取
 `GET /session/{id}/appium/commands` 与
@@ -350,8 +362,9 @@ func (c ExtensionCatalog) SupportsExecuteMethod(name string) bool
 ```
 
 Helper 只执行区分大小写、逐字节相等的精确匹配，不 trim、不做大小写折叠、不接受
-前缀、通配符、别名或拼接格式；空参数始终返回 false。Helper 不发起远端请求，
-不检查 Source、CatalogMetadata 或设备状态，也不表示实际命令一定能够成功。
+前缀、通配符、别名或拼接格式；空参数始终返回 false。Source 是 provenance，
+不属于这些 Supports execution identity，因此 helper 不检查 Source、CatalogMetadata
+或设备状态，也不表示实际命令一定能够成功。
 
 Runtime Discovery 只回答“当前 Session 登记了什么”，不能推导：
 
@@ -648,7 +661,7 @@ internal/bidi       BiDi 协议实现
 | AD-021 | Accepted | Runtime Discovery 不作为普通命令的自动门禁、fallback 或成功保证 | 实际命令仍返回真实远端结果 |
 | AD-022 | Accepted | SDK 只公开根包 `appium.Client`；平台包不定义 Client 或 Session wrapper | 调用方始终使用同一 Client/Session 对象模型 |
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
-| AD-024 | Accepted | Runtime Discovery 按 Source 与协议 identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
+| AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

@@ -77,6 +77,12 @@ Runtime Discovery 目录：
 目录条目的三类 identity、`base`/`driver`/`plugins[pluginName]` 来源层级、可选
 section 和未知字段遵循 `docs/design.md` 的 Catalog 模型。Commands 的 `rest` /
 `bidi` 与 Extensions 的 `rest` section 都可缺失；缺失与显式空 object 必须区分。
-非法目录结构、空的结构性标识符或无法解码的已知字段返回 `CodeResponseInvalid`，
-Delivery 为 `DeliveryAcknowledged`。本节定义 DP-041 的协议边界，DP-040 本身
-不增加运行时 API 或远端请求。
+只要 section 存在，Commands 的 `base`、`driver` 或 Extensions 的 `driver` 就
+必须存在且为 JSON object；这些 object 可以为空，`plugins` 则可缺失。因而顶层
+`{}` 合法，而 `{"rest":{}}`、`{"bidi":{}}` 及 Extensions 的 `{"rest":{}}`
+非法。Params 是对象数组，每项必须包含非空 string `name` 与 boolean `required`，
+并保留缺失与显式空数组的差异。HTTP、BiDi、Execute Method 分别按
+`method+path`、`domain+name`、`name` 精确匹配；Source 仅记录 provenance，不参与
+Supports 查询。非法目录结构、空的结构性标识符、必需 child 缺失或无法解码的
+已知字段返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。本节定义
+DP-041 的协议边界，DP-040 本身不增加运行时 API 或远端请求。

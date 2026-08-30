@@ -105,9 +105,9 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | CFG-002 | 读取当前 Timeouts | Session method (`CurrentTimeouts`) | Implemented | Appium 3 Get Timeouts (`command` / `implicit`) | 字段必须存在；值严格校验整数毫秒、非负和 `time.Duration` 溢出，拒绝 `null`；保留既有 `Timeouts` 设置类型 | Protocol | `timeouts.go`, `timeouts_test.go`, `docs/command-semantics.md` |
 | CFG-003 | 读取 Session Settings | Session method (`Settings`) | Implemented | Appium `GET /session/{id}/appium/settings` | 返回值必须是 JSON object；键值由 Driver/Plugin 定义；每次远端读取并返回深拷贝 | Protocol | `settings.go`, `settings_test.go`, `docs/command-semantics.md` |
 | CFG-004 | 增量更新 Session Settings | Session method (`UpdateSettings`) | Implemented | Appium `POST /session/{id}/appium/settings` | 只发送明确字段；不缓存、不维护白名单；nil Settings 在发送前拒绝 | Protocol | `settings.go`, `settings_test.go`, `docs/command-semantics.md` |
-| DISC-001 | 读取 Command Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | DP-040 已固定 `rest`/`bidi`、`base`/`driver`/`plugins[name]` 层级和 HTTP/BiDi identity；DP-041 实现 `Session.Commands` |
-| DISC-002 | 读取 Extension Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | DP-040 已固定 `rest.driver`/`rest.plugins[name]` 和 Execute Method identity；DP-041 实现 `Session.Extensions` |
-| DISC-003 | Catalog 本地 `Supports` helper | Session method | Accepted | 纯本地快照查询 | 不能视为执行成功保证 | None | DP-040 已固定按 HTTP、BiDi、Execute Method 分开的精确匹配规则；DP-041 实现 helper |
+| DISC-001 | 读取 Command Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | DP-040 已固定 `rest`/`bidi`、必需 `base`/`driver`、可选 `plugins[name]` 层级，HTTP/BiDi identity 及 `params[].required`；DP-041 实现 `Session.Commands` |
+| DISC-002 | 读取 Extension Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | DP-040 已固定 `rest.driver`/`rest.plugins[name]`、必需 `driver` child、Execute Method identity 及 `params[].required`；DP-041 实现 `Session.Extensions` |
+| DISC-003 | Catalog 本地 `Supports` helper | Session method | Accepted | 纯本地快照查询 | 不能视为执行成功保证 | None | DP-040 已固定按 HTTP、BiDi、Execute Method 分开的精确 execution identity 匹配规则，Source 仅作 provenance；DP-041 实现 helper |
 | OBS-001 | 命令 Observer | Client option / callback | Implemented | Client-side lifecycle callbacks | 不等同远端 Logs | Protocol | `observer.go`, `observer_test.go` |
 
 ### 5.2 Element
