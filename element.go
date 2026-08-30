@@ -14,8 +14,11 @@ import (
 )
 
 const (
-	findElementOperation         = "find_element"
-	findElementsOperation        = "find_elements"
+	findElementOperation             = "find_element"
+	findElementsOperation            = "find_elements"
+	findElementFromElementOperation  = "find_element_from_element"
+	findElementsFromElementOperation = "find_elements_from_element"
+
 	getElementRectOperation      = "get_element_rect"
 	getElementTextOperation      = "get_element_text"
 	getElementAttributeOperation = "get_element_attribute"
@@ -252,6 +255,205 @@ func (e *Element) ID() string {
 		return ""
 	}
 	return e.id
+}
+
+// Find 在当前元素的后代中查找第一个位于当前 Window 内的匹配元素。
+//
+// 底层使用 W3C Find Elements From Element 获取全部结构匹配候选，
+// 再按照远端返回顺序检查候选 Rect。
+// 只有候选 Rect 与当前 Window Rect 存在正面积交集时，
+// 该候选才会被视为有效结果。
+//
+// Locator Strategy 会按照调用方提供的协议值原样发送，
+// 客户端不会执行别名转换或自动规范化。
+func (e *Element) Find(
+	ctx context.Context,
+	locator Locator,
+) (*Element, error) {
+	candidates, err := e.findElementCandidates(
+		ctx,
+		findElementFromElementOperation,
+		locator,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(candidates) == 0 {
+		return nil, elementNotFoundInWindowError(
+			findElementFromElementOperation,
+		)
+	}
+
+	windowRect, err := e.session.WindowRect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, candidate := range candidates {
+		rect, err := candidate.Rect(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := intersectRects(
+			rect,
+			windowRect,
+		); ok {
+			return candidate, nil
+		}
+	}
+
+	return nil, elementNotFoundInWindowError(
+		findElementFromElementOperation,
+	)
+}
+
+// FindElements 在当前元素的后代中查找全部位于当前 Window 内的匹配元素。
+//
+// 底层使用 W3C Find Elements From Element 获取全部结构匹配候选，
+// 并保持远端返回顺序。
+// 只有候选 Rect 与当前 Window Rect 存在正面积交集的元素
+// 才会包含在最终结果中。
+//
+// 没有有效元素时返回非 nil 空 slice 和 nil error。
+func (e *Element) FindElements(
+	ctx context.Context,
+	locator Locator,
+) ([]*Element, error) {
+	candidates, err := e.findElementCandidates(
+		ctx,
+		findElementsFromElementOperation,
+		locator,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(candidates) == 0 {
+		return candidates, nil
+	}
+
+	windowRect, err := e.session.WindowRect(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	elements := make(
+		[]*Element,
+		0,
+		len(candidates),
+	)
+
+	for _, candidate := range candidates {
+		rect, err := candidate.Rect(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		if _, ok := intersectRects(
+			rect,
+			windowRect,
+		); ok {
+			elements = append(
+				elements,
+				candidate,
+			)
+		}
+	}
+
+	return elements, nil
+}
+
+// findElementCandidates 获取当前元素后代中的全部结构匹配候选。
+//
+// 本方法只负责 W3C Find Elements From Element 和元素引用解码，
+// 不判断候选是否位于当前 Window 内。
+func (e *Element) findElementCandidates(
+	ctx context.Context,
+	operation string,
+	locator Locator,
+) ([]*Element, error) {
+	session, client, err := e.commandContext(operation)
+	if err != nil {
+		return nil, err
+	}
+
+	if locator.Strategy == "" {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: operation,
+			Message:   "locator strategy is empty",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	command, err := wire.NewCommand(
+		operation,
+		http.MethodPost,
+		"session",
+		session.id,
+		"element",
+		e.id,
+		"elements",
+	)
+	if err != nil {
+		return nil, commandDefinitionError(
+			operation,
+			"find elements from element command definition is invalid",
+			err,
+		)
+	}
+
+	request := struct {
+		Using string `json:"using"`
+		Value string `json:"value"`
+	}{
+		Using: string(locator.Strategy),
+		Value: locator.Value,
+	}
+
+	var elementIDs []string
+
+	err = client.executeCommand(
+		ctx,
+		command,
+		request,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			ids, decodeErr := decodeElementReferences(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			elementIDs = ids
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	elements := make(
+		[]*Element,
+		len(elementIDs),
+	)
+
+	for index, elementID := range elementIDs {
+		elements[index] = &Element{
+			session: session,
+			id:      elementID,
+		}
+	}
+
+	return elements, nil
 }
 
 // Rect 获取元素当前的 WebDriver Rect。
