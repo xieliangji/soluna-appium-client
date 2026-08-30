@@ -120,7 +120,9 @@ func TestSessionSettingsProtocolAndNoCache(t *testing.T) {
 	if err := contracttest.MatchHeader(updateRequest, "Content-Type", "application/json"); err != nil {
 		t.Fatal(err)
 	}
-	if err := contracttest.MatchJSONBody(updateRequest, update); err != nil {
+	if err := contracttest.MatchJSONBody(updateRequest, map[string]any{
+		"settings": update,
+	}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -134,7 +136,9 @@ func TestSessionSettingsProtocolAndNoCache(t *testing.T) {
 	if err := contracttest.MatchHeader(emptyUpdateRequest, "Content-Type", "application/json"); err != nil {
 		t.Fatal(err)
 	}
-	if err := contracttest.MatchJSONBody(emptyUpdateRequest, appium.Settings{}); err != nil {
+	if err := contracttest.MatchJSONBody(emptyUpdateRequest, map[string]any{
+		"settings": appium.Settings{},
+	}); err != nil {
 		t.Fatal(err)
 	}
 }

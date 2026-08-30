@@ -73,9 +73,10 @@ func (s *Session) Settings(ctx context.Context) (Settings, error) {
 
 // UpdateSettings 增量更新当前 Session 的远端 Settings。
 //
-// settings 会作为 JSON object 原样发送；客户端不会过滤、规范化或缓存其中的
-// 键值。空的非 nil Settings 会发送 `{}`。nil Settings 不是 JSON object，
-// 因此在请求发送前返回 CodeInvalidArgument。
+// settings 会作为 `{"settings":<object>}` 请求体中的 object 原样发送；客户端不会
+// 过滤、规范化或缓存其中的键值。空的非 nil Settings 会发送
+// `{"settings":{}}`。nil Settings 不是 JSON object，因此在请求发送前返回
+// CodeInvalidArgument。
 func (s *Session) UpdateSettings(
 	ctx context.Context,
 	settings Settings,
@@ -110,10 +111,16 @@ func (s *Session) UpdateSettings(
 		)
 	}
 
+	request := struct {
+		Settings Settings `json:"settings"`
+	}{
+		Settings: cloneSettings(settings),
+	}
+
 	return client.executeCommand(
 		ctx,
 		command,
-		cloneSettings(settings),
+		request,
 		client.commandTimeout,
 		client.limits.MaxResponseBytes,
 		decodeNullResponse,
