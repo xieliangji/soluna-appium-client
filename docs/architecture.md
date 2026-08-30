@@ -1,306 +1,236 @@
-# soluna-appium-client 架构设计
+# soluna-appium-client 架构
 
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-08-29
+> 最后更新：2026-08-30
 
-## 1. 文档范围
+## 1. 文档职责
 
-本文档用于说明 `soluna-appium-client` 的整体结构、模块边界、核心抽象和长期约束。
+本文档描述 `soluna-appium-client` 当前及首个稳定版本目标中的高层结构，包括系统定位、公共对象模型、包边界、依赖方向、运行链路和长期演进约束。
 
-本文档不描述具体的 HTTP 路径、请求字段、错误码映射、默认超时时间和单个命令的实现方式。这些内容分别放在以下文档中维护：
+本文档只回答“系统由哪些部分组成、各部分负责什么、边界在哪里”，不记录命令级参数、具体实现算法、资源阈值、源码文件规划、设计取舍过程或设计决策清单。相关内容分别维护在：
 
-- `docs/command-semantics.md`
-- `docs/error-model.md`
-- `docs/coordinate-system.md`
-- `docs/compatibility.md`
-- `docs/release-policy.md`
+- `docs/design.md`：跨领域详细设计、实现约束、待解决设计问题和设计决策索引；
+- `docs/sdk-capability-matrix.md`：SDK 能力范围、公共入口、实施状态和优先级；
+- `docs/command-semantics.md`：命令级参数、响应、副作用和失败语义；
+- `docs/error-model.md`：错误分类、命令投递状态和诊断数据；
+- `docs/coordinate-system.md`：WebDriver 坐标、截图像素及转换边界；
+- `docs/compatibility.md`：真实 Appium、Driver、WDA、设备 OS 和 Host OS 组合的验证结果；
+- `docs/release-policy.md`：公共 API、兼容性声明和版本发布规则。
 
-架构文档只记录会影响整个项目的决策。局部实现细节不应写入本文档。
+架构文档描述当前认可的整体结构，不承担设计决策历史记录。设计理由、替代方案和后果应写入 `docs/design.md`；需要独立审议的重要决策可进一步拆成 `docs/adr/` 下的单独 ADR。
 
 ## 2. 项目定位
 
-`soluna-appium-client` 是一个使用 Go 编写的 Appium 客户端库，面向 iOS 和 Android 移动自动化场景。
+`soluna-appium-client` 是一个使用 Go 编写、面向 iOS 和 Android 真机自动化的 Appium 客户端库。
 
-项目基于 W3C WebDriver 协议，并补充 Appium 及其移动端 Driver 所需的能力。它向调用方提供统一的 Client、Session、Element、Actions、应用控制和录屏接口，同时隔离底层 HTTP、协议解析和平台差异。
+项目基于 W3C WebDriver 与 Appium 3 协议，为调用方提供统一的 Client、Session、Element 和通用移动自动化能力，并通过独立平台包补充 XCUITest 与 UiAutomator2 的高价值特有能力。
 
-项目当前只支持 Appium 3.x，不承担 Appium 2 的兼容责任。
+项目不以完整复制其他语言 Appium Client 的全部 API 为目标。公共能力以真实自动化价值、语义可验证性、资源可控性和 Host 跨平台能力为主要准入依据。
 
-## 3. 范围与非目标
+## 3. 架构目标
 
-### 3.1 首个稳定版本的范围
+整体架构遵循以下目标：
 
-首个稳定版本优先覆盖以下能力：
+- **统一公共对象模型**：调用方只面对根包定义的 Client、Session 和 Element；
+- **通用能力优先**：语义稳定且跨 Driver 的能力进入根包，平台差异留在平台包；
+- **单一执行语义**：所有远端交互共享一致的 context、错误、资源限制和观测边界；
+- **显式状态**：不隐藏 Session 恢复、命令重试、能力 fallback 或业务状态恢复；
+- **资源有界**：大型响应和持续事件流不能形成无界内存占用；
+- **兼容性可验证**：SDK 范围、运行时能力和真实环境兼容性分别维护，不互相替代；
+- **Host 独立优先**：平台能力可以是 iOS-only 或 Android-only，但不应无必要地绑定调用端或 Appium Host 操作系统。
 
-- Appium Server 状态检查；
-- WebDriver Session 创建、访问和关闭；
-- W3C Capabilities 与 Timeouts；
-- 元素查找、读取和输入；
-- Window Rect、Screenshot 和 Page Source；
-- 基于 W3C Actions 的点击、长按和滑动；
-- 应用激活、终止和状态查询；
-- 屏幕录制，并支持将录屏结果直接写入 `io.Writer`；
-- W3C Script Execution；
-- XCUITest 与 UiAutomator2 的平台扩展；
-- 结构化错误、命令观测和有界响应处理；
-- 面向协议兼容性的测试工具。
-
-新增能力应优先满足真实使用场景，不以完整复制其他语言客户端的全部 API 为目标。
-
-### 3.2 非目标
-
-本项目不负责：
-
-- Appium Server、Node.js、Driver 和 Plugin 的安装或进程管理；
-- 设备发现、设备占用、adb、WDA 或隧道管理；
-- 测试用例组织、断言、报告和测试编排；
-- 业务页面恢复和逻辑 Session 恢复；
-- stale element 后自动重新定位；
-- 失败命令的自动重试；
-- Session 命令的自动串行化；
-- 对任意 HTTP Method 和 Route 的公共 Raw Command API；
-- 云端 Appium 服务商专用的 Header Provider 或认证抽象。
-
-## 4. 总体结构
+## 4. 调用方对象模型
 
 ```mermaid
 flowchart TB
-    Consumer[Go application]
+    App[Go application]
 
-    Root[appium root package]
+    Client[appium.Client<br/>统一公共 Client 类型]
+    Session[appium.Session]
+    Element[appium.Element]
+
+    XCUI[xcuitest<br/>无状态平台扩展函数]
+    UIA[uiautomator2<br/>无状态平台扩展函数]
+    Wait[wait<br/>轮询与条件辅助]
+
+    App -->|创建或复用| Client
+    Client -->|CreateSession| Session
+    Session -->|Find / FindElements| Element
+
+    App -. 可选调用 .-> XCUI
+    App -. 可选调用 .-> UIA
+    App -. 可选调用 .-> Wait
+
+    XCUI -->|操作同一个 Session / Element| Session
+    XCUI -->|操作同一个 Element| Element
+    UIA -->|操作同一个 Session / Element| Session
+    UIA -->|操作同一个 Element| Element
+    Wait -->|轮询公共 API| Session
+    Wait -->|轮询公共 API| Element
+```
+
+SDK 只定义一个公共 Client 类型：`appium.Client`。
+
+连接多个 Appium Endpoint 时，调用方可以创建多个 `appium.Client` 实例；这不意味着存在 XCUITest Client、UiAutomator2 Client 或 BiDi Client 等平行公共类型。
+
+`xcuitest`、`uiautomator2` 和 `wait` 不拥有独立 Session，也不包装根包 Session。它们接收根包创建的 `*appium.Session` 或 `*appium.Element`，并复用其所属 Client、远端 Session 身份和统一执行语义。
+
+## 5. 包依赖与运行拓扑
+
+```mermaid
+flowchart TB
+    Root[appium root package<br/>Client / Session / Element]
+
     XCUI[xcuitest]
     UIA[uiautomator2]
     Wait[wait]
     Contract[contracttest]
 
-    Wire[internal/wire]
+    Wire[internal/wire<br/>HTTP request-response]
+    BiDi[internal/bidi<br/>WebDriver BiDi event stream]
     Codec[internal/codec]
     Redact[internal/redact]
 
-    Server[Appium 3 Server]
-    Driver[XCUITest / UiAutomator2 Driver]
-    Device[iOS / Android Device]
-
-    Consumer --> Root
-    Consumer --> XCUI
-    Consumer --> UIA
-    Consumer --> Wait
+    HTTP[Appium HTTP endpoint]
+    WS[Appium WebDriver BiDi endpoint]
+    Driver[XCUITest / UiAutomator2 / Plugins]
+    Device[iOS / Android device]
 
     XCUI --> Root
     UIA --> Root
     Wait --> Root
 
     Root --> Wire
+    Root --> BiDi
     Wire --> Codec
     Wire --> Redact
-    Wire --> Server
+    BiDi --> Codec
+    BiDi --> Redact
 
-    Server --> Driver
+    Wire --> HTTP
+    BiDi --> WS
+    HTTP --> Driver
+    WS --> Driver
     Driver --> Device
 
     Contract -. test only .-> Root
 ```
 
-根包提供跨平台公共能力。平台包只负责各自 Driver 的特有功能。所有远端命令最终进入同一套内部传输和协议处理链路。
+根包拥有公共对象模型和跨平台协议能力。平台包只能依赖根包，不能互相依赖，也不能各自实现一套独立传输。
 
-## 5. 包职责
+HTTP 与 WebDriver BiDi 是同一远端 Session 的两种内部运行通道。它们可以使用不同连接和协议实现，但不能演化成调用方需要分别管理的公共 Client。
 
-| 包或目录 | 职责 |
+## 6. 分层职责
+
+| 层或包 | 架构职责 |
 |---|---|
-| 根包 `appium` | Client、Session、Element、Capabilities、Timeouts、Actions、应用控制、录屏、脚本执行、错误和观测接口 |
-| `xcuitest` | XCUITest Driver 特有能力的强类型封装 |
-| `uiautomator2` | UiAutomator2 Driver 特有能力的强类型封装 |
-| `wait` | 可选的显式等待与轮询条件 |
-| `contracttest` | Fake Server、请求记录、协议匹配和故障场景构造 |
-| `internal/wire` | HTTP 传输、Endpoint 构造、W3C Envelope 和远端错误解析 |
-| `internal/codec` | JSON、Base64、UTF-8 等编解码支持 |
-| `internal/redact` | 日志和错误数据脱敏 |
-| `examples` | 只依赖公共 API 的最小使用示例 |
-| `docs` | 架构、协议语义、兼容性和发布规则 |
+| 根包 `appium` | 统一 Client、Session、Element、跨平台协议能力、公共错误和公共事件抽象 |
+| `xcuitest` | 只能由 XCUITest 提供且具有明确价值的强类型扩展 |
+| `uiautomator2` | 只能由 UiAutomator2 提供且具有明确价值的强类型扩展 |
+| `wait` | 基于公共 API 的可选轮询与条件策略，不改变底层命令语义 |
+| `contracttest` | 面向 SDK 使用方和项目自身的协议测试支持，不进入运行时依赖 |
+| `internal/wire` | Appium/W3C HTTP 传输与响应处理 |
+| `internal/bidi` | WebDriver BiDi 连接与事件传输；实现前可以不存在 |
+| `internal/codec` | 公共执行链使用的编解码能力 |
+| `internal/redact` | 错误、日志和诊断数据的脱敏支持 |
+| `docs` | 架构、设计、能力、语义、兼容性和发布规则的分层维护 |
 
-依赖关系必须保持单向：
+依赖方向必须保持从平台扩展和策略层指向根包，再由根包指向 `internal` 实现。`internal` 类型不得泄漏为公共 API。
 
-- 根包不能依赖 `xcuitest` 或 `uiautomator2`；
-- 两个平台包不能互相依赖；
-- `wait` 只能依赖根包；
-- `contracttest` 不得进入运行时依赖；
-- `internal` 中的实现不能成为公共 API 的一部分。
+## 7. 核心抽象
 
-## 6. 核心抽象
+### 7.1 Client
 
-### 6.1 Client
+`Client` 表示一个固定的 Appium Server Endpoint 和一组客户端级配置。它负责创建 Session，并为该 Client 创建的所有 Session 提供统一的传输、超时、资源限制、错误和观测基础。
 
-`Client` 表示一个固定的 Appium Server Endpoint，负责保存客户端配置并创建物理 Session。
+Client 不负责安装、启动或维护 Appium Server、Driver、Plugin、设备、WDA 或隧道。
 
-一个 Client 可以被多个 goroutine 使用，但不负责启动或维护 Appium Server 进程。
+### 7.2 Session
 
-### 6.2 Session
+`Session` 表示一次远端 WebDriver 物理会话。它绑定所属 Client、远端 Session ID 和远端确认的 Capabilities。
 
-`Session` 表示一次远端 WebDriver 物理会话。Session 持有所属 Client、Session ID、Capabilities 快照以及与会话相关的少量协议状态。
+Session 不代表可恢复的业务会话。物理 Session 丢失后，是否创建新 Session 以及如何恢复应用状态，由上层系统负责。
 
-Session 不代表可恢复的业务会话。Session 丢失后，是否创建新会话以及如何恢复现场由调用方决定。
-
-### 6.3 Element
+### 7.3 Element
 
 `Element` 表示绑定到某个 Session 的远端元素引用。
 
-Element 不缓存文本、属性或坐标，不保存用于查找它的 Locator，也不自动处理 stale。这样可以避免客户端在不掌握页面语义的情况下执行隐式恢复。
+Element 不拥有独立连接，也不代表可自动恢复的业务元素。其生命周期受所属 Session 和远端页面状态约束。
 
-### 6.4 Capabilities 与 Locator
+### 7.4 平台扩展
 
-Capabilities 保持开放结构，以支持 Appium Driver 和 Plugin 的扩展字段。客户端不会维护完整的 Capability 白名单。
+平台扩展以无状态函数或轻量公共类型存在，接收根包 Session 或 Element。平台包只表达通用层无法稳定表达的 Driver 特有语义，不复制根包已有能力。
 
-Locator 使用明确的 Strategy 和 Value。公共 API 不接受旧名称别名，也不执行自动 normalize；调用方必须使用协议定义的策略或库提供的构造方法。
+### 7.5 事件流
 
-### 6.5 Error 与 Observer
+持续日志、性能和网络等数据通过与 Session 绑定的事件流抽象交付。事件流属于同一公共对象模型，不建立独立客户端层级。
 
-Error 用于描述命令失败的事实，包括错误类别、操作、HTTP 状态、远端错误标识、命令投递状态和受限的远端数据。
+## 8. 执行架构
 
-Observer 用于采集命令耗时、状态和数据量等运行信息。Observer 不应改变命令结果，也不能成为业务控制入口。
+系统包含两类远端交互：
 
-## 7. 命令执行
+- **命令链路**：通过 Appium HTTP 执行 W3C、Appium 和 Driver 命令；
+- **事件链路**：通过 WebDriver BiDi 接收与当前 Session 相关的持续事件。
 
-所有远端命令必须经过统一执行链路。该链路负责：
+两类链路共享以下架构边界：
 
-- 校验调用参数；
-- 处理 `context.Context` 的取消和截止时间；
-- 构造请求地址和请求体；
-- 限制请求及响应规模；
-- 解析 W3C 响应；
-- 转换结构化错误；
-- 记录命令观测信息；
-- 对日志和错误数据进行脱敏。
+- Session 身份与生命周期；
+- context 取消和截止时间；
+- 错误与关闭语义；
+- 资源限制与脱敏规则；
+- Host、Driver 和设备版本兼容性声明。
 
-各业务方法不能绕过该链路自行发送 HTTP 请求。
+平台包不能绕过根包自行建立不受这些边界约束的 HTTP 或 WebSocket 通道。
 
-核心客户端不自动重试远端命令。对于点击、输入、滑动、脚本执行等带副作用的操作，传输中断时无法可靠判断远端是否已经执行，自动重放会造成重复操作。
+## 9. 范围边界
 
-根包不公开接受任意 HTTP Method 和 Route 的 Raw Command API。W3C Script Execution 作为标准能力保留；平台特有功能应通过 `xcuitest`、`uiautomator2` 或明确的公共方法提供。
+本项目负责 Appium 客户端协议和可复用自动化原语，不负责：
 
-## 8. Session 与并发
+- Appium Server、Driver、Plugin、Node.js 或外部工具的安装与进程管理；
+- 设备发现、设备占用、WDA 构建、WDA 安装、adb 或 RemoteXPC Tunnel 管理；
+- 测试用例编排、断言、报告和业务页面模型；
+- 业务状态恢复、逻辑 Session 恢复和 stale element 自动重定位；
+- 对副作用命令的隐式重试；
+- Session 命令的业务顺序调度；
+- 任意 Method/Route 的公共 Raw HTTP 接口；
+- 特定云厂商的认证和 Header 适配层。
 
-Session 的生命周期只描述远端物理会话的创建、可用、关闭和丢失状态。
+## 10. 能力与兼容性治理
 
-客户端对象应当具备并发内存安全性，但不会为同一 Session 自动串行化命令。多个 goroutine 同时发送命令时，库不承诺它们的业务执行顺序。
+项目分别维护三类事实：
 
-需要确定顺序的调用方必须在自身执行层完成调度。项目不提供可选的 Session 命令串行器。
+| 事实 | 维护位置 | 含义 |
+|---|---|---|
+| SDK 能力范围 | `docs/sdk-capability-matrix.md` | SDK 已实现、已接受、待设计、延期或排除的能力 |
+| Runtime Discovery | 活动 Session 返回的能力目录 | 当前 Appium、Driver 和 Plugin 登记的命令与扩展 |
+| 兼容性验证 | `docs/compatibility.md` | 已在具体 Host、Appium、Driver、WDA 和设备组合上验证的结果 |
 
-Session 关闭操作应允许重复调用，并能够识别“远端会话已经不存在”的情况。发生网络中断时，客户端只报告当前能够确认的状态，不在后台继续清理或恢复。
+三类事实不能互相替代。公共 API 存在不表示当前 Session 一定支持；运行时登记不表示当前设备状态一定可执行；单一组合实测通过也不扩大为其他版本或 Host 的兼容承诺。
 
-## 9. 错误与诊断数据
+项目当前以 Appium 3 为协议基线。设备 OS、Driver/WDA 和 Host OS 的具体支持范围由兼容性文档维护，不在架构文档中复制版本表。
 
-错误模型的目标是说明发生了什么，而不是替调用方决定下一步动作。
+## 11. 测试架构
 
-错误至少应区分：
+测试分为三类：
 
-- 本地配置或参数错误；
-- context 取消或超时；
-- HTTP 传输失败；
-- W3C 响应格式错误；
-- Appium 远端命令错误；
-- Session 丢失；
-- Element 不存在或已失效；
-- 响应超过限制。
+1. 单元测试：验证本地状态、参数和编解码；
+2. 协议测试：验证 HTTP/BiDi 请求、响应、事件和错误语义；
+3. 兼容性测试：在真实 Appium、Driver、WDA、设备 OS 和 Host OS 组合上验证能力。
 
-对于无法确认远端是否已收到命令的情况，错误必须保留“不确定”的投递语义。公共错误不提供简单的 `Retryable` 结论。
+协议测试证明 SDK 对协议的实现符合预期，但不等同真实环境兼容。正式兼容声明必须来自兼容性测试记录。
 
-公共错误可以暴露远端返回的数据，但必须经过大小限制和必要的脱敏。完整数据的字段形式及限制在 `docs/error-model.md` 中定义。
+## 12. 演进约束
 
-## 10. 资源边界与录屏
-
-Page Source、Screenshot 和 Recording 都可能产生较大响应，必须设置硬性上限。客户端不得无界读取远端数据。
-
-屏幕录制同时支持：
-
-- 返回内存中的录屏数据；
-- 将解码后的录屏数据直接写入 `io.Writer`。
-
-写入 `io.Writer` 的接口属于 v0.1 范围，用于降低长录屏场景的峰值内存占用。
-
-默认日志只记录命令名称、耗时、状态码和数据量等元数据，不记录输入文本、页面源、截图、录屏内容或完整请求体。
-
-## 11. 平台扩展
-
-根包只保留跨平台且语义稳定的能力。
-
-XCUITest 和 UiAutomator2 的特有功能分别放在独立包中，并以强类型参数和结果对外提供。平台包通过根包提供的内部执行能力调用 Appium，不自行实现另一套 HTTP 传输。
-
-平台能力进入公共 API 前，应满足以下条件：
-
-- 有明确的实际使用场景；
-- 对应 Appium 3 Driver 行为已经验证；
-- 参数和返回值能够形成稳定的 Go 类型；
-- 已有协议测试和真实环境测试。
-
-### 11.1 运行时能力发现
-
-这里的“Feature Discovery”是指：运行时向 Appium 查询当前 Session 暴露了哪些命令或扩展，再据此判断某个能力是否可用。
-
-一旦在客户端内部缓存查询结果，就需要处理 Session 重建、Driver 或 Plugin 变化后的缓存失效问题，这就是此前所说的“缓存策略”。
-
-首个稳定版本面向固定的 Appium 3.x 兼容矩阵，暂不提供 Commands、Extensions、Supports 等运行时能力发现 API，也不设计对应缓存。后续出现明确需求时再单独评审。
-
-## 12. `wait` 与 `contracttest`
-
-`wait` 是建立在公共 Session 和 Element API 之上的可选策略包。它可以重复检查条件，但不能修改 Session 配置、恢复 Session 或吞掉基础设施错误。
-
-`contracttest` 为协议实现和外部使用方提供测试支持。它负责构造可控的 Appium 响应、记录请求并比较协议语义。该包只用于测试，不进入客户端运行时路径。
-
-## 13. 兼容性与版本基线
-
-项目的最低 Go 版本为 **Go 1.26.5**。
-
-项目只支持 **Appium 3.x**。Appium Server、XCUITest Driver、UiAutomator2 Driver、iOS、Android 和设备类型的已验证组合记录在 `docs/compatibility.md` 中。
-
-未列入兼容性矩阵的版本组合不作稳定性承诺。
-
-v0.x 阶段允许调整公共 API，但所有破坏性变更必须记录在发布说明中。首个稳定版本发布前，以下内容应保持稳定：
-
-- 根包与平台包的职责边界；
-- Client、Session、Element 的基本对象关系；
-- context 和超时语义；
-- 错误及命令投递语义；
-- 大响应的资源边界；
-- 已声明兼容版本的协议测试结果。
-
-## 14. 测试结构
-
-测试分为三层：
-
-1. 单元测试：验证参数校验、编解码、错误转换和内部状态；
-2. 协议测试：通过 `contracttest` 验证请求与 W3C/Appium 响应语义；
-3. 兼容性测试：在真实 Appium 3.x、XCUITest 和 UiAutomator2 环境中验证主要功能。
-
-修复真实环境中的兼容性问题时，应补充对应的回归测试。协议测试通过不等于真实设备兼容，因此正式发布前必须执行兼容性矩阵中的实际环境测试。
-
-## 15. 已确认的架构决策
-
-| 编号 | 决策 |
-|---|---|
-| AD-001 | 项目以 Client、Session 和 Element 作为主要公共抽象 |
-| AD-002 | 只支持 Appium 3.x，不兼容 Appium 2 |
-| AD-003 | 最低 Go 版本为 Go 1.26.5 |
-| AD-004 | 核心客户端不自动重试远端命令 |
-| AD-005 | 不公开任意 Method/Route 的 Raw Extension Command API |
-| AD-006 | 不提供云端 Appium 服务商专用 Header Provider |
-| AD-007 | v0.1 实现将录屏结果直接写入 `io.Writer` 的能力 |
-| AD-008 | 不提供 Session 命令串行器，命令顺序由调用方管理 |
-| AD-009 | Locator Strategy 不做旧名称兼容和自动 normalize |
-| AD-010 | 公共 Error 暴露经过大小限制和脱敏的远端数据 |
-| AD-011 | 首个稳定版本不提供运行时能力发现及其缓存 |
-| AD-012 | XCUITest 与 UiAutomator2 使用独立平台包，不扩张根包职责 |
-| AD-013 | 根包不公开巨型 Adapter 接口，调用方按需定义接口 |
-
-## 16. 变更规则
-
-以下变更需要同步更新本文档，必要时增加 ADR：
+以下变化属于架构变化，需要更新本文档：
 
 - 新增或拆分公共包；
-- 改变依赖方向；
-- 改变 Client、Session 或 Element 的职责；
-- 改变 Session 生命周期或并发语义；
-- 改变超时、错误或命令投递的基本模型；
-- 扩大项目支持的 Appium 主版本范围。
+- 改变唯一公共 Client 模型；
+- 改变 Client、Session 或 Element 的职责与所有权；
+- 改变根包、平台包、策略包和 `internal` 的依赖方向；
+- 引入新的远端执行通道或改变 HTTP/BiDi 的边界；
+- 改变 SDK 与上层业务编排、设备管理或服务端管理的职责边界；
+- 扩大项目支持的 Appium 主版本。
 
-单个命令的参数、响应结构和兼容处理不属于架构变更，应记录在对应的详细设计或协议文档中。
+命令参数、错误映射、缓存策略、具体算法、资源限制、源码拆分和设计决策不直接写入本文档，应分别更新设计、语义、能力或兼容性文档。
