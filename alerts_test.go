@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"testing"
 
 	appium "github.com/xieliangji/soluna-appium-client"
@@ -268,17 +269,15 @@ func assertAlertRequest(t *testing.T, request contracttest.RecordedRequest, meth
 	if contentType := request.Header.Get("Content-Type"); contentType != "application/json" {
 		t.Fatalf("expected JSON content type, got %q", contentType)
 	}
-	var decoded map[string]any
+	var decoded any
 	if err := json.Unmarshal(request.Body, &decoded); err != nil {
 		t.Fatalf("decode request body: %v", err)
 	}
-	if len(body) == 0 {
-		if len(decoded) != 0 {
-			t.Fatalf("expected empty JSON object, got %#v", decoded)
-		}
-		return
+	object, ok := decoded.(map[string]any)
+	if !ok || object == nil {
+		t.Fatalf("expected JSON object request body, got %#v", decoded)
 	}
-	if decoded["text"] != body["text"] {
-		t.Fatalf("unexpected request body: %#v", decoded)
+	if !reflect.DeepEqual(object, body) {
+		t.Fatalf("unexpected request body: got %#v, want %#v", object, body)
 	}
 }
