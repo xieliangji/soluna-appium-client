@@ -100,8 +100,11 @@ func decodeBase64To(
 		base64.StdEncoding.Strict(),
 		strings.NewReader(encoded),
 	)
+	destination := base64TrackingWriter{
+		writer: dst,
+	}
 
-	written, err := io.Copy(dst, contextReader{
+	written, err := io.Copy(&destination, contextReader{
 		ctx:    ctx,
 		reader: decoder,
 	})
@@ -109,7 +112,16 @@ func decodeBase64To(
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return written, ctxErr
 		}
-		return written, fmt.Errorf("%w: %v", ErrInvalidBase64, err)
+		if destination.err != nil {
+			return written, destination.err
+		}
+		if errors.Is(err, io.ErrShortWrite) {
+			return written, err
+		}
+		return written, fmt.Errorf("%w: %w", ErrInvalidBase64, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return written, err
 	}
 
 	if written != expectedLength {
@@ -122,6 +134,21 @@ func decodeBase64To(
 	}
 
 	return written, nil
+}
+
+// base64TrackingWriter 保留目标 Writer 的原始错误，以免和 Base64 解码错误混淆。
+type base64TrackingWriter struct {
+	writer io.Writer
+	err    error
+}
+
+// Write 实现 io.Writer。
+func (w *base64TrackingWriter) Write(p []byte) (int, error) {
+	written, err := w.writer.Write(p)
+	if err != nil {
+		w.err = err
+	}
+	return written, err
 }
 
 // decodedBase64Length 返回标准 Base64 数据解码后的准确字节数。

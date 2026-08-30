@@ -63,6 +63,25 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Session Screenshot
+
+`Session.Screenshot` 和 `Session.ScreenshotTo` 使用同一条 W3C Screenshot
+命令和 Base64 解码路径：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Session.Screenshot` | GET | `/session/{sessionId}/screenshot` | 无 | 解码后的 PNG 字节 |
+| `Session.ScreenshotTo(io.Writer)` | GET | `/session/{sessionId}/screenshot` | 无 | 写入目标的解码后 PNG 字节数 |
+
+请求不带 body，也不发送 `Content-Type`。远端成功 value 必须是 JSON
+string，内容必须是紧凑的标准 Base64；空字符串表示零字节截图。截图命令的
+响应体和解码后数据均使用 `Limits.MaxScreenshotResponseBytes` 上限。
+`Screenshot` 通过内存 Writer 调用 `ScreenshotTo`，不维护另一套解码或校验逻辑。
+
+`ScreenshotTo` 返回已经写入目标 Writer 的字节数。Base64 解码、Writer 写入或
+调用方 context 结束时，目标中可能已经存在部分数据；客户端不自动重试或恢复
+Session。Element Screenshot、Viewport Screenshot 和本地裁剪不属于本命令契约。
+
 ## Runtime Discovery（DP-041 实现契约）
 
 `Session.Commands` 和 `Session.Extensions` 分别读取当前 Session 的 Appium

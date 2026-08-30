@@ -471,6 +471,11 @@ Page Source、Screenshot、Element Screenshot、Recording、Pull Logs 和 BiDi E
 
 Base64 解码、context 结束或 Writer 写入失败时，Writer 可能已经包含部分数据。流式方法必须同时返回已写入字节数和错误。
 
+当前 Screenshot 使用 `Limits.MaxScreenshotResponseBytes` 作为独立资源上限，
+同时约束 HTTP 响应体读取和 Base64 解码后的截图数据；`Session.Screenshot`
+通过内存 Writer 复用 `Session.ScreenshotTo` 的完整解码路径。Element Screenshot
+尚未在本计划项中实现。
+
 资源配置只在对应能力实现时加入公共 `Limits`，不提前暴露没有实际效果的字段。
 
 ## 10. Logs 与 WebDriver BiDi

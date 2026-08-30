@@ -108,6 +108,9 @@ func normalizeLimits(limits Limits) (Limits, error) {
 	if limits.MaxPageSourceResponseBytes < 0 {
 		return Limits{}, invalidClientConfig("Page Source 响应大小上限不能为负数")
 	}
+	if limits.MaxScreenshotResponseBytes < 0 {
+		return Limits{}, invalidClientConfig("Screenshot 响应大小上限不能为负数")
+	}
 	if limits.MaxRecordingResponseBytes < 0 {
 		return Limits{}, invalidClientConfig("录屏响应大小上限不能为负数")
 	}
@@ -122,6 +125,9 @@ func normalizeLimits(limits Limits) (Limits, error) {
 	}
 	if limits.MaxPageSourceResponseBytes == 0 {
 		limits.MaxPageSourceResponseBytes = defaults.MaxPageSourceResponseBytes
+	}
+	if limits.MaxScreenshotResponseBytes == 0 {
+		limits.MaxScreenshotResponseBytes = defaults.MaxScreenshotResponseBytes
 	}
 	if limits.MaxRecordingResponseBytes == 0 {
 		limits.MaxRecordingResponseBytes = defaults.MaxRecordingResponseBytes

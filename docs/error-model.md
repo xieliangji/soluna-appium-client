@@ -39,6 +39,19 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `CodeInvalidArgument`，Delivery 为 `DeliveryNotSent`；远端返回非 null 成功值时
 同样返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Screenshot 响应与流式交付错误
+
+`Session.Screenshot` 与 `Session.ScreenshotTo` 共享 Screenshot 专用响应上限
+`Limits.MaxScreenshotResponseBytes`。HTTP 响应体超过该上限时返回
+`CodeResponseTooLarge`，Delivery 为 `DeliveryAcknowledged`。成功 value 不是
+JSON string、Base64 格式不合法或 Writer 写入失败时返回 `CodeResponseInvalid`，
+Delivery 为 `DeliveryAcknowledged`；`ScreenshotTo` 仍返回已经写入的字节数。
+
+nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
+`DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
+相应的取消/截止时间错误并保持 `DeliveryNotSent`；响应收到后解码期间结束时
+保持 `DeliveryAcknowledged`。客户端不因这些错误自动重试或恢复 Session。
+
 ## Runtime Discovery 响应错误
 
 DP-041 的 `Session.Commands` 和 `Session.Extensions` 对目录响应执行整体严格

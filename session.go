@@ -23,7 +23,6 @@ const (
 	cleanupSessionOperation = "cleanup_session"
 
 	getWindowRectOperation = "get_window_rect"
-	screenshotOperation    = "screenshot"
 	pageSourceOperation    = "page_source"
 )
 
@@ -276,77 +275,6 @@ func (s *Session) WindowRect(
 	}
 
 	return rect, nil
-}
-
-// Screenshot 获取当前 Session 的屏幕截图。
-//
-// 返回值为解码后的 PNG 字节数据。
-// 客户端不会对截图尺寸或像素坐标语义进行额外转换。
-func (s *Session) Screenshot(
-	ctx context.Context,
-) ([]byte, error) {
-	client, err := s.commandClient(
-		screenshotOperation,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	command, err := wire.NewCommand(
-		screenshotOperation,
-		http.MethodGet,
-		"session",
-		s.id,
-		"screenshot",
-	)
-	if err != nil {
-		return nil, &Error{
-			Code:      CodeInvalidConfig,
-			Operation: screenshotOperation,
-			Message:   "screenshot command definition is invalid",
-			Delivery:  DeliveryNotSent,
-			Cause:     err,
-		}
-	}
-
-	var screenshot []byte
-
-	err = client.executeCommand(
-		ctx,
-		command,
-		nil,
-		client.commandTimeout,
-		client.limits.MaxResponseBytes,
-		func(
-			ctx context.Context,
-			value json.RawMessage,
-		) error {
-			encoded, decodeErr := codec.DecodeJSONString(
-				ctx,
-				value,
-			)
-			if decodeErr != nil {
-				return decodeErr
-			}
-
-			decoded, decodeErr := codec.DecodeBase64(
-				ctx,
-				encoded,
-				client.limits.MaxResponseBytes,
-			)
-			if decodeErr != nil {
-				return decodeErr
-			}
-
-			screenshot = decoded
-			return nil
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return screenshot, nil
 }
 
 // PageSource 获取当前 Session 的页面源。
