@@ -115,7 +115,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
 | ELM-001 | `Session.Find` / `FindElements` | Session method | Implemented | W3C plural element lookup + Window intersection | Native Context 语义已定义 | Protocol | `element.go`, `element_find_test.go` |
-| ELM-002 | Element 作用域 `Find` / `FindElements` | Element method | Accepted | W3C find from element | 继续使用 Window intersection 过滤 | None | 下一批通用能力 |
+| ELM-002 | Element 作用域 `Find` / `FindElements` | Element method | Implemented | W3C plural find from element + Window intersection | Native Context 语义已定义 | Protocol | `element.go`, `element_find_scope_test.go` |
 | ELM-003 | `Element.Rect` / `Text` / `Attribute` | Element method | Implemented | W3C Element commands | Attribute 允许远端 `null` | Protocol | `element.go`, `element_test.go` |
 | ELM-004 | `Element.Clear` / `SendKeys` | Element method | Implemented | W3C Element commands | Driver 输入法行为不同 | Protocol | `element.go`, `element_test.go` |
 | ELM-005 | `Element.Tap` / `TapInWindowIntersection` | Element method | Implemented | Window/Element Rect + W3C Actions | 每次点击重新读取几何状态 | Protocol | `element.go`, `element_tap_test.go` |
