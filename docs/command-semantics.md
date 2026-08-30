@@ -62,3 +62,19 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
+
+## Runtime Discovery（DP-041 实现契约）
+
+`Session.Commands` 和 `Session.Extensions` 分别读取当前 Session 的 Appium
+Runtime Discovery 目录：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Session.Commands` | GET | `/session/{sessionId}/appium/commands` | 无 | Appium 3 command catalog，解码为 `CommandCatalog` |
+| `Session.Extensions` | GET | `/session/{sessionId}/appium/extensions` | 无 | Appium 3 extension catalog，解码为 `ExtensionCatalog` |
+
+请求不带 body，也不发送 `Content-Type`。每次调用都重新读取远端，不缓存目录。
+目录条目的 `Origin`、`Kind` 和未知字段遵循 `docs/design.md` 的 Catalog 模型；
+非法目录结构、缺失标识符或无法解码的已知字段返回 `CodeResponseInvalid`，
+Delivery 为 `DeliveryAcknowledged`。本节定义 DP-041 的协议边界，DP-040 本身
+不增加运行时 API 或远端请求。

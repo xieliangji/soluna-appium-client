@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-030`（已完成；下一项需显式选择）
+> 当前计划项：`DP-040`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -23,7 +23,7 @@
 | 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Done | — |
 | 2 | `DP-020` 读取 Timeouts | `CFG-002` | Done | — |
 | 3 | `DP-030` Session Settings | `CFG-003..004` | Done | — |
-| 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Queued | — |
+| 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Done | — |
 | 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Queued | DP-040 |
 | 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Queued | — |
 | 7 | `DP-051` Element Screenshot | `ELM-006..007` | Queued | DP-050 |
@@ -89,6 +89,9 @@
 - Appium、Driver、Plugin origin；
 - HTTP/BiDi command 与 Execute Method 类型；
 - 未知字段、深拷贝和 `Supports` 精确匹配规则。
+
+已固定 `CommandCatalog`、`ExtensionCatalog` 和 `CatalogEntry` 公共模型；具体
+HTTP 命令、解码和本地 helper 在 DP-041 实现。
 
 排除远端请求、缓存、自动门禁和 fallback。
 

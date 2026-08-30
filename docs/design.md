@@ -210,6 +210,86 @@ Session Settings 使用开放的 `Settings map[string]any` 表达 Driver/Plugin 
 `POST /session/{id}/appium/settings` 只发送调用方提供的增量字段。客户端不维护
 Setting 白名单、不自动规范化值，也不根据一次更新推测后续读取结果。
 
+### 6.1 Runtime Discovery Catalog 公共模型
+
+DP-040 只确定 Runtime Discovery 的公共模型和跨领域边界；远端命令与解码实现
+由 DP-041 完成。目录分为 `CommandCatalog` 和 `ExtensionCatalog`，两者的条目
+都使用同一个稳定结构：
+
+```go
+type CatalogEntry struct {
+    Name   string
+    Origin CatalogOrigin
+    Kind   CatalogKind
+    Extra  map[string]any
+}
+
+type CommandCatalog struct {
+    Entries []CatalogEntry
+    Extra   map[string]any
+}
+
+type ExtensionCatalog struct {
+    Entries []CatalogEntry
+    Extra   map[string]any
+}
+
+type CatalogOrigin string
+
+const (
+    CatalogOriginUnknown CatalogOrigin = ""
+    CatalogOriginAppium  CatalogOrigin = "appium"
+    CatalogOriginDriver  CatalogOrigin = "driver"
+    CatalogOriginPlugin  CatalogOrigin = "plugin"
+)
+
+type CatalogKind string
+
+const (
+    CatalogKindUnknown       CatalogKind = ""
+    CatalogKindHTTP          CatalogKind = "http"
+    CatalogKindBiDi          CatalogKind = "bidi"
+    CatalogKindExecuteMethod CatalogKind = "execute_method"
+)
+```
+
+`CatalogOrigin` 的标准值为 `appium`、`driver` 和 `plugin`，分别表示 Appium
+核心、当前 Driver 和当前 Plugin 提供的条目。`CatalogKind` 的标准值为：
+
+| Kind | 含义 | 实际执行通道 |
+|---|---|---|
+| `http` | Appium/W3C HTTP command | 根包 Session 的统一 HTTP 执行链 |
+| `bidi` | WebDriver BiDi command | 绑定同一 Session 的内部 BiDi 通道 |
+| `execute_method` | Appium Execute Method（例如 `mobile: ...`） | 根包 Session 的 Execute Script 能力 |
+
+`Origin` 和 `Kind` 都是可扩展的 string 类型。远端返回的未知非空值必须原样
+保留；缺失值保持 `Unknown` 零值。客户端不得根据 endpoint、名称前缀或
+命令格式推断来源或类型。
+
+`Name` 是远端提供的命令或扩展标识符，必须非空并按原始字符串保存。目录条目
+保持远端顺序；除非远端协议明确保证唯一性，客户端不去重。`Extra` 保存目录或
+条目中未被稳定字段表达的未知字段，包含其中的嵌套 map/slice，并在每次返回时
+递归深拷贝。无法解码为预期目录结构、已知字段类型错误或条目标识符缺失时，
+整体返回 `CodeResponseInvalid`，不返回部分目录。
+
+`Session.Commands(ctx)` 和 `Session.Extensions(ctx)` 每次分别读取
+`GET /session/{id}/appium/commands` 与
+`GET /session/{id}/appium/extensions`，不建立 Session 缓存。GET 请求不带 body，
+也不发送 `Content-Type`。两者返回的新目录及其 `Entries`、`Extra` 均与之前调用
+独立；调用方修改快照不会影响后续读取。
+
+目录类型提供纯本地 `Supports(name string) bool` helper。helper 只对 `Name`
+执行区分大小写、逐字节相等的精确匹配：不 trim、不做大小写折叠、不接受前缀、
+通配符或别名；空名称始终返回 false。`Supports` 不发起远端请求，也不检查
+Origin、Kind 或 Extra，更不表示命令在当前设备状态下一定能够成功。
+
+两个目录类型都提供同名 helper：
+
+```go
+func (c CommandCatalog) Supports(name string) bool
+func (c ExtensionCatalog) Supports(name string) bool
+```
+
 Runtime Discovery 只回答“当前 Session 登记了什么”，不能推导：
 
 - 当前设备 OS 满足命令最低版本；
@@ -505,6 +585,7 @@ internal/bidi       BiDi 协议实现
 | AD-021 | Accepted | Runtime Discovery 不作为普通命令的自动门禁、fallback 或成功保证 | 实际命令仍返回真实远端结果 |
 | AD-022 | Accepted | SDK 只公开根包 `appium.Client`；平台包不定义 Client 或 Session wrapper | 调用方始终使用同一 Client/Session 对象模型 |
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
+| AD-024 | Accepted | Runtime Discovery 使用带 Origin/Kind 的稳定 Catalog 条目；未知字段递归保留，Supports 只做精确匹配 | 保留 Appium/Driver/Plugin 事实，避免目录查询产生隐式能力推断 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

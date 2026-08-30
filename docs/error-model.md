@@ -39,6 +39,13 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `CodeInvalidArgument`，Delivery 为 `DeliveryNotSent`；远端返回非 null 成功值时
 同样返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Runtime Discovery 响应错误
+
+DP-041 的 `Session.Commands` 和 `Session.Extensions` 对目录响应执行整体严格
+解码。目录结构非法、条目标识符缺失、已知字段类型错误或未知字段无法解析时，
+返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`；不返回部分目录。
+目录查询不会因为 `Supports` 结果而改变其他命令的错误或 Delivery 语义。
+
 ## Delivery
 
 - `DeliveryNotSent`：调用方 context 已结束、参数无效或请求构造失败，
