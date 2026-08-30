@@ -16,6 +16,7 @@ const (
 	CodeTransportFailed  ErrorCode = "transport_failed"   // HTTP 或网络传输失败
 	CodeResponseInvalid  ErrorCode = "response_invalid"   // 远端响应格式无效
 	CodeResponseTooLarge ErrorCode = "response_too_large" // 远端响应超过允许上限
+	CodeOutputFailed     ErrorCode = "output_failed"      // 本地输出交付失败
 	CodeCommandFailed    ErrorCode = "command_failed"     // 远端命令执行失败
 	CodeSessionLost      ErrorCode = "session_lost"       // WebDriver Session 已丢失或失效
 	CodeElementNotFound  ErrorCode = "element_not_found"  // 未找到目标元素

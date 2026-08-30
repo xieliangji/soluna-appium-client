@@ -230,11 +230,18 @@ func TestScreenshotToReportsPartialWriterFailure(t *testing.T) {
 			destination.data,
 		)
 	}
-	if !appium.IsErrorCode(err, appium.CodeResponseInvalid) {
+	if !appium.IsErrorCode(err, appium.CodeOutputFailed) {
 		t.Fatalf("unexpected error code: %v", err)
 	}
 	if !errors.Is(err, failure) {
 		t.Fatalf("writer error was not preserved: %v", err)
+	}
+	var clientErr *appium.Error
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("expected structured client error: %v", err)
+	}
+	if clientErr.Cause != failure {
+		t.Fatalf("writer cause was not preserved: got %v", clientErr.Cause)
 	}
 	if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
 		t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))

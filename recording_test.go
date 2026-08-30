@@ -3,6 +3,7 @@ package soluna_appium_client_test
 import (
 	"bytes"
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -210,6 +211,90 @@ func TestRecordingProtocol(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestStopRecordingToMapsWriterFailureToOutputError(t *testing.T) {
+	const encoded = "c29sdW5hLXJlY29yZGluZw=="
+
+	recorder := contracttest.NewRecorder(
+		http.HandlerFunc(
+			func(
+				writer http.ResponseWriter,
+				request *http.Request,
+			) {
+				writer.Header().Set("Content-Type", "application/json")
+
+				switch request.RequestURI {
+				case "/session":
+					_, _ = writer.Write([]byte(
+						`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+					))
+				case "/session/session/appium/stop_recording_screen":
+					_, _ = writer.Write([]byte(`{"value":"` + encoded + `"}`))
+				default:
+					http.NotFound(writer, request)
+				}
+			},
+		),
+	)
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+
+	client, err := server.NewClient(appium.ClientOptions{})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	session, err := client.CreateSession(
+		context.Background(),
+		appium.MatchCapabilities(appium.Capabilities{
+			"platformName":          "iOS",
+			"appium:automationName": "XCUITest",
+		}),
+	)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	failure := errors.New("recording destination is closed")
+	destination := &recordingOutputErrorWriter{err: failure}
+	written, err := session.StopRecordingTo(
+		context.Background(),
+		destination,
+	)
+	if err == nil {
+		t.Fatal("expected destination writer failure")
+	}
+	if written != 0 {
+		t.Fatalf("unexpected written count: %d", written)
+	}
+	if !appium.IsErrorCode(err, appium.CodeOutputFailed) {
+		t.Fatalf("unexpected error code: %v", err)
+	}
+	if !errors.Is(err, failure) {
+		t.Fatalf("writer error was not preserved: %v", err)
+	}
+
+	var clientErr *appium.Error
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("expected structured client error: %v", err)
+	}
+	if clientErr.Cause != failure {
+		t.Fatalf("writer cause was not preserved: got %v", clientErr.Cause)
+	}
+	if clientErr.Message == "WebDriver response value is invalid" {
+		t.Fatal("writer failure must not use response-invalid message")
+	}
+	if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
+		t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
+	}
+}
+
+type recordingOutputErrorWriter struct {
+	err error
+}
+
+func (w *recordingOutputErrorWriter) Write([]byte) (int, error) {
+	return 0, w.err
 }
 
 func TestRecordingRejectsInvalidArgumentsBeforeDelivery(t *testing.T) {

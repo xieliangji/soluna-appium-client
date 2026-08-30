@@ -44,13 +44,18 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `Session.Screenshot` 与 `Session.ScreenshotTo` 共享 Screenshot 专用响应上限
 `Limits.MaxScreenshotResponseBytes`。HTTP 响应体超过该上限时返回
 `CodeResponseTooLarge`，Delivery 为 `DeliveryAcknowledged`。成功 value 不是
-JSON string、Base64 格式不合法或 Writer 写入失败时返回 `CodeResponseInvalid`，
-Delivery 为 `DeliveryAcknowledged`；`ScreenshotTo` 仍返回已经写入的字节数。
+JSON string 或 Base64 格式不合法时返回 `CodeResponseInvalid`；Writer 写入失败
+时返回 `CodeOutputFailed`，Delivery 仍为 `DeliveryAcknowledged`，并通过 `Cause`
+保留原始 Writer error。`ScreenshotTo` 仍返回已经写入的字节数。
 
 nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
 `DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
 相应的取消/截止时间错误并保持 `DeliveryNotSent`；响应收到后解码期间结束时
 保持 `DeliveryAcknowledged`。客户端不因这些错误自动重试或恢复 Session。
+
+`StopRecordingTo` 对合法录屏响应的 Writer 失败也返回 `CodeOutputFailed`，并保留
+已经写入的字节数和原始 Writer error；Base64 或响应格式错误仍返回
+`CodeResponseInvalid`。
 
 ## Runtime Discovery 响应错误
 

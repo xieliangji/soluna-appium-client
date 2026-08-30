@@ -361,6 +361,22 @@ func mapResponseDecodeFailure(
 	err error,
 ) error {
 	switch {
+	case errors.Is(err, codec.ErrOutputWrite):
+		var outputErr *codec.OutputError
+		cause := err
+		if errors.As(err, &outputErr) && outputErr.Cause != nil {
+			cause = outputErr.Cause
+		}
+
+		return &Error{
+			Code:       CodeOutputFailed,
+			Operation:  operation,
+			Message:    "WebDriver response value could not be written to output",
+			StatusCode: response.StatusCode,
+			Delivery:   DeliveryAcknowledged,
+			Cause:      cause,
+		}
+
 	case errors.Is(err, context.Canceled),
 		errors.Is(err, context.DeadlineExceeded):
 		return contextExecutionError(

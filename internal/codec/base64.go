@@ -13,6 +13,7 @@ import (
 var (
 	ErrInvalidBase64  = errors.New("invalid base64 data")
 	ErrBase64TooLarge = errors.New("decoded base64 data exceeds limit")
+	ErrOutputWrite    = errors.New("base64 output write failed")
 )
 
 // DecodeBase64 将标准 Base64 字符串解码为字节数据。
@@ -113,10 +114,14 @@ func decodeBase64To(
 			return written, ctxErr
 		}
 		if destination.err != nil {
-			return written, destination.err
+			return written, &OutputError{
+				Cause: destination.err,
+			}
 		}
 		if errors.Is(err, io.ErrShortWrite) {
-			return written, err
+			return written, &OutputError{
+				Cause: err,
+			}
 		}
 		return written, fmt.Errorf("%w: %w", ErrInvalidBase64, err)
 	}
@@ -134,6 +139,37 @@ func decodeBase64To(
 	}
 
 	return written, nil
+}
+
+// OutputError 表示 Base64 解码结果写入目标时发生的错误。
+//
+// Cause 保留底层 Writer 错误，调用方可以通过 errors.Is/As 继续检查。
+type OutputError struct {
+	Cause error
+}
+
+// Error 返回输出交付错误文本。
+func (e *OutputError) Error() string {
+	if e == nil {
+		return "<nil>"
+	}
+	if e.Cause == nil {
+		return ErrOutputWrite.Error()
+	}
+	return ErrOutputWrite.Error() + ": " + e.Cause.Error()
+}
+
+// Unwrap 返回底层 Writer 错误。
+func (e *OutputError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Cause
+}
+
+// Is 让 OutputError 能够匹配 ErrOutputWrite。
+func (e *OutputError) Is(target error) bool {
+	return target == ErrOutputWrite
 }
 
 // base64TrackingWriter 保留目标 Writer 的原始错误，以免和 Base64 解码错误混淆。

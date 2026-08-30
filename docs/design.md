@@ -469,7 +469,7 @@ Page Source、Screenshot、Element Screenshot、Recording、Pull Logs 和 BiDi E
 
 便捷方法应复用流式解码路径，避免出现两套 Base64 校验、上限和错误语义。
 
-Base64 解码、context 结束或 Writer 写入失败时，Writer 可能已经包含部分数据。流式方法必须同时返回已写入字节数和错误。
+Base64 解码、context 结束或 Writer 写入失败时，Writer 可能已经包含部分数据。流式方法必须同时返回已写入字节数和错误；其中 Writer 交付失败统一映射为 `CodeOutputFailed`，不与远端响应格式错误混淆。
 
 当前 Screenshot 使用 `Limits.MaxScreenshotResponseBytes` 作为独立资源上限，
 同时约束 HTTP 响应体读取和 Base64 解码后的截图数据；`Session.Screenshot`

@@ -78,9 +78,14 @@ string，内容必须是紧凑的标准 Base64；空字符串表示零字节截�
 响应体和解码后数据均使用 `Limits.MaxScreenshotResponseBytes` 上限。
 `Screenshot` 通过内存 Writer 调用 `ScreenshotTo`，不维护另一套解码或校验逻辑。
 
-`ScreenshotTo` 返回已经写入目标 Writer 的字节数。Base64 解码、Writer 写入或
-调用方 context 结束时，目标中可能已经存在部分数据；客户端不自动重试或恢复
-Session。Element Screenshot、Viewport Screenshot 和本地裁剪不属于本命令契约。
+`ScreenshotTo` 返回已经写入目标 Writer 的字节数。Base64 解码失败时返回
+`CodeResponseInvalid`；Writer 写入失败时返回 `CodeOutputFailed`，并保留原始
+Writer error 作为 Cause。任一错误发生时，目标中可能已经存在部分数据；调用方
+context 结束时返回相应的取消/截止时间错误。客户端不自动重试或恢复 Session。
+Element Screenshot、Viewport Screenshot 和本地裁剪不属于本命令契约。
+
+`StopRecordingTo` 使用相同的流式输出错误语义：录屏响应有效但目标 Writer
+失败时返回 `CodeOutputFailed`，而不是 `CodeResponseInvalid`。
 
 ## Runtime Discovery（DP-041 实现契约）
 
