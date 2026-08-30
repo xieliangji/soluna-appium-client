@@ -319,10 +319,10 @@ func TestSessionTimeoutsProtocolAndNoCache(t *testing.T) {
 		case request.Method == http.MethodGet && request.RequestURI == "/session/session%2Fid/timeouts":
 			requestCount++
 			if requestCount == 1 {
-				_, _ = writer.Write([]byte(`{"value":{"script":0,"pageLoad":12345,"implicit":2500}}`))
+				_, _ = writer.Write([]byte(`{"value":{"command":12345,"implicit":2500}}`))
 				return
 			}
-			_, _ = writer.Write([]byte(`{"value":{"script":1,"pageLoad":2,"implicit":3}}`))
+			_, _ = writer.Write([]byte(`{"value":{"command":2,"implicit":3}}`))
 		default:
 			http.NotFound(writer, request)
 		}
@@ -344,14 +344,14 @@ func TestSessionTimeoutsProtocolAndNoCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read first timeouts: %v", err)
 	}
-	if first.Script != 0 || first.PageLoad != 12345*time.Millisecond || first.Implicit != 2500*time.Millisecond {
+	if first.Command == nil || *first.Command != 12345*time.Millisecond || first.Implicit == nil || *first.Implicit != 2500*time.Millisecond {
 		t.Fatalf("unexpected first timeouts: %#v", first)
 	}
 	second, err := session.Timeouts(context.Background())
 	if err != nil {
 		t.Fatalf("read second timeouts: %v", err)
 	}
-	if second.Script != time.Millisecond || second.PageLoad != 2*time.Millisecond || second.Implicit != 3*time.Millisecond {
+	if second.Command == nil || *second.Command != 2*time.Millisecond || second.Implicit == nil || *second.Implicit != 3*time.Millisecond {
 		t.Fatalf("unexpected second timeouts: %#v", second)
 	}
 	if requestCount != 2 {
@@ -369,11 +369,10 @@ func TestSessionTimeoutsRejectInvalidResponses(t *testing.T) {
 		name     string
 		response string
 	}{
-		{name: "missing field", response: `{"value":{"script":1,"pageLoad":2}}`},
-		{name: "null field", response: `{"value":{"script":1,"pageLoad":null,"implicit":2}}`},
-		{name: "negative", response: `{"value":{"script":-1,"pageLoad":2,"implicit":3}}`},
-		{name: "fractional", response: `{"value":{"script":1.5,"pageLoad":2,"implicit":3}}`},
-		{name: "duration overflow", response: `{"value":{"script":9223372036855,"pageLoad":2,"implicit":3}}`},
+		{name: "missing field", response: `{"value":{"command":1}}`},
+		{name: "negative", response: `{"value":{"command":-1,"implicit":2}}`},
+		{name: "fractional", response: `{"value":{"command":1.5,"implicit":2}}`},
+		{name: "duration overflow", response: `{"value":{"command":9223372036855,"implicit":2}}`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -389,8 +388,22 @@ func TestSessionTimeoutsRejectInvalidResponses(t *testing.T) {
 	}
 }
 
+func TestSessionTimeoutsAllowsNullValues(t *testing.T) {
+	session, _ := newTimeoutTestSession(t, `{"value":{"command":null,"implicit":0}}`)
+	timeouts, err := session.Timeouts(context.Background())
+	if err != nil {
+		t.Fatalf("read timeouts: %v", err)
+	}
+	if timeouts.Command != nil {
+		t.Fatalf("expected nil command timeout, got %v", *timeouts.Command)
+	}
+	if timeouts.Implicit == nil || *timeouts.Implicit != 0 {
+		t.Fatalf("expected zero implicit timeout, got %v", timeouts.Implicit)
+	}
+}
+
 func TestSessionTimeoutsCanceledBeforeDelivery(t *testing.T) {
-	session, recorder := newTimeoutTestSession(t, `{"value":{"script":1,"pageLoad":2,"implicit":3}}`)
+	session, recorder := newTimeoutTestSession(t, `{"value":{"command":1,"implicit":2}}`)
 	recorder.Reset()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

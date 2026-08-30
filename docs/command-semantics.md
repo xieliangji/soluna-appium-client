@@ -29,13 +29,14 @@
 
 ## Session Timeouts
 
-`Session.Timeouts` 每次读取标准 W3C 命令：
+`Session.Timeouts` 每次读取 Appium 3 Get Timeouts 命令：
 
 ```text
 GET /session/{sessionId}/timeouts
 ```
 
-请求不带 body。成功值必须是同时包含 `script`、`pageLoad` 和 `implicit`
-三个字段的 JSON object；字段值必须是非负整数毫秒。零是有效值，字段缺失
-或显式 `null` 均属于响应格式错误。毫秒值超出 `time.Duration` 可表示范围时
-同样返回 `CodeResponseInvalid`。读取结果不在 Session 本地缓存。
+请求不带 body。成功值必须是同时包含 `command` 和 `implicit` 两个字段的
+JSON object；字段值必须是非负整数毫秒或显式 `null`。零是有效值，字段缺失
+属于响应格式错误。非空整数值超出 `time.Duration` 可表示范围时同样返回
+`CodeResponseInvalid`。读取结果不在 Session 本地缓存。SetTimeout 请求中的
+`script`、`pageLoad`、`implicit` 字段不承诺会从该读取命令中原样返回。

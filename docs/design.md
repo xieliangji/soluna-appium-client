@@ -141,6 +141,10 @@ Observer: finished
 
 内部命令超时只约束远端执行阶段。参数编码和响应值解码仍应检查调用方 context，避免大响应处理在调用方取消后继续运行。
 
+Appium 3 的 Get Timeouts 响应按实际 `GetTimeoutsResult` 建模为 `command` 和
+`implicit` 两个可空超时值。SDK 不根据 SetTimeout 请求中可发送的 `script` 或
+`pageLoad` 字段推断读取结果，也不将 W3C 理论模型强行补齐为 Appium 未返回的字段。
+
 ### 4.2 命令投递状态
 
 错误必须保留客户端能够确认的命令投递事实：

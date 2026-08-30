@@ -20,26 +20,25 @@ const (
 	setImplicitWaitOperation    = "set_implicit_wait"
 )
 
-// Timeouts 表示 WebDriver Session 当前使用的超时配置。
+// Timeouts 表示 Appium Get Timeouts 返回的当前超时配置。
 //
-// 所有超时均使用 Go 的 time.Duration 表示。
-// 具体的协议传输层负责在 time.Duration 与 WebDriver 使用的毫秒值之间转换。
+// Command 表示 Appium 当前 command timeout，Implicit 表示元素查找使用的
+// implicit timeout。指针为 nil 表示远端明确返回了 JSON null；非 nil 值
+// 使用 Go 的 time.Duration 表示。该类型不包含 SetTimeout 请求中的
+// Script/PageLoad 字段，因为 Appium 3 的 Get Timeouts 响应不返回它们。
 type Timeouts struct {
-	// Script 表示脚本执行超时时间。
-	Script time.Duration
+	// Command 表示 Appium command timeout；nil 表示远端返回 null。
+	Command *time.Duration
 
-	// PageLoad 表示页面加载超时时间。
-	PageLoad time.Duration
-
-	// Implicit 表示元素查找使用的隐式等待超时时间。
-	Implicit time.Duration
+	// Implicit 表示元素查找使用的隐式等待超时时间；nil 表示远端返回 null。
+	Implicit *time.Duration
 }
 
-// Timeouts 获取当前 Session 的 Script、PageLoad 和 Implicit 超时配置。
+// Timeouts 获取当前 Session 的 Appium command 和 implicit 超时配置。
 //
-// 远端返回值必须包含三个整数毫秒字段；字段值可以为零，但不能为负数，
-// 且必须能够安全转换为 time.Duration。方法每次调用都会读取远端结果，
-// 不缓存之前的响应。
+// 远端返回值必须包含 command 和 implicit 字段。字段值可以是非负整数毫秒
+// 或显式 null；整数值必须能够安全转换为 time.Duration。方法每次调用都会
+// 读取远端结果，不缓存之前的响应。
 func (s *Session) Timeouts(ctx context.Context) (Timeouts, error) {
 	client, err := s.commandClient(getTimeoutsOperation)
 	if err != nil {
@@ -235,7 +234,7 @@ func timeoutMilliseconds(
 	return timeout.Milliseconds(), nil
 }
 
-// decodeTimeouts 严格解码 W3C Get Timeouts 的响应值。
+// decodeTimeouts 严格解码 Appium 3 Get Timeouts 的响应值。
 func decodeTimeouts(
 	ctx context.Context,
 	value json.RawMessage,
@@ -245,33 +244,23 @@ func decodeTimeouts(
 	}
 
 	var payload struct {
-		Script   json.RawMessage `json:"script"`
-		PageLoad json.RawMessage `json:"pageLoad"`
+		Command  json.RawMessage `json:"command"`
 		Implicit json.RawMessage `json:"implicit"`
 	}
 	if err := json.Unmarshal(value, &payload); err != nil {
 		return Timeouts{}, fmt.Errorf("decode timeouts response: %w", err)
 	}
 
-	script, err := decodeTimeoutDuration(
+	command, err := decodeNullableTimeoutDuration(
 		ctx,
-		"script",
-		payload.Script,
+		"command",
+		payload.Command,
 	)
 	if err != nil {
 		return Timeouts{}, err
 	}
 
-	pageLoad, err := decodeTimeoutDuration(
-		ctx,
-		"pageLoad",
-		payload.PageLoad,
-	)
-	if err != nil {
-		return Timeouts{}, err
-	}
-
-	implicit, err := decodeTimeoutDuration(
+	implicit, err := decodeNullableTimeoutDuration(
 		ctx,
 		"implicit",
 		payload.Implicit,
@@ -281,42 +270,42 @@ func decodeTimeouts(
 	}
 
 	return Timeouts{
-		Script:   script,
-		PageLoad: pageLoad,
+		Command:  command,
 		Implicit: implicit,
 	}, nil
 }
 
-// decodeTimeoutDuration 将一个整数毫秒 JSON 字段转换为 time.Duration。
-func decodeTimeoutDuration(
+// decodeNullableTimeoutDuration 将一个可空整数毫秒 JSON 字段转换为 time.Duration。
+func decodeNullableTimeoutDuration(
 	ctx context.Context,
 	field string,
 	value json.RawMessage,
-) (time.Duration, error) {
+) (*time.Duration, error) {
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return nil, err
 	}
 	if len(value) == 0 {
-		return 0, fmt.Errorf("timeouts response does not contain %s", field)
+		return nil, fmt.Errorf("timeouts response does not contain %s", field)
 	}
 	if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
-		return 0, fmt.Errorf("timeouts response field %s is null", field)
+		return nil, nil
 	}
 
 	var millis int64
 	if err := json.Unmarshal(value, &millis); err != nil {
-		return 0, fmt.Errorf("decode timeouts %s milliseconds: %w", field, err)
+		return nil, fmt.Errorf("decode timeouts %s milliseconds: %w", field, err)
 	}
 	if millis < 0 {
-		return 0, fmt.Errorf("timeouts response field %s is negative", field)
+		return nil, fmt.Errorf("timeouts response field %s is negative", field)
 	}
 	if millis > math.MaxInt64/int64(time.Millisecond) {
-		return 0, errors.New("timeouts response value overflows time.Duration")
+		return nil, errors.New("timeouts response value overflows time.Duration")
 	}
 
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return nil, err
 	}
 
-	return time.Duration(millis) * time.Millisecond, nil
+	duration := time.Duration(millis) * time.Millisecond
+	return &duration, nil
 }
