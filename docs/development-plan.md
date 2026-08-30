@@ -1,0 +1,355 @@
+# soluna-appium-client 开发计划
+
+> 文档状态：Active  
+> 当前计划项：`DP-010`  
+> 最后更新：2026-08-30
+
+## Agent 执行约束
+
+- 只执行当前 Prompt 指定的一个 `DP-*` 项；Prompt 只说“下一项”时执行最靠前的 `Ready` 项。
+- 队列顺序表示建议优先级；只有“硬前置”不可绕过。
+- 开始前读取根 `AGENTS.md`、对应能力矩阵项和本任务涉及的权威文档。
+- 不顺带实现相邻能力、后续计划项或无关重构。
+- 设计缺失、硬前置未完成或权威文档冲突时停止并报告。
+- 完成后同步必要测试、领域文档、能力矩阵和本项状态；不自动启动下一项。
+- `Blocked` 项只有在阻塞条件满足且 Prompt 明确选择时执行。
+
+状态：`Ready` 当前建议执行；`Queued` 等待选择；`Blocked` 等待条件；`Done` 已完成；`Superseded` 已替代。
+
+## 队列
+
+| 顺序 | 计划项 | 能力 ID | 状态 | 硬前置 |
+|---:|---|---|---|---|
+| 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Ready | — |
+| 2 | `DP-020` 读取 Timeouts | `CFG-002` | Queued | — |
+| 3 | `DP-030` Session Settings | `CFG-003..004` | Queued | — |
+| 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Queued | — |
+| 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Queued | DP-040 |
+| 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Queued | — |
+| 7 | `DP-051` Element Screenshot | `ELM-006..007` | Queued | DP-050 |
+| 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Queued | — |
+| 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Queued | DP-060 |
+| 10 | `DP-070` 通用显式等待 | `WAIT-001` | Queued | — |
+| 11 | `DP-071` Element 显式等待 | `WAIT-002` | Queued | DP-070 |
+| 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Queued | — |
+| 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Queued | DP-080 |
+| 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Queued | — |
+| 15 | `DP-091` Context API 实现 | `CTX-001` | Queued | DP-090 |
+| 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Queued | — |
+| 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Queued | DP-100 |
+| 18 | `DP-110` 应用放入后台 | `NAV-001` | Queued | — |
+| 19 | `DP-111` 屏幕方向 | `NAV-002` | Queued | — |
+| 20 | `DP-120` 活动 App ID | `DEV-001` | Queued | — |
+| 21 | `DP-121` 设备时间 | `DEV-002` | Queued | — |
+| 22 | `DP-130` Deep Link | `NAV-003` | Queued | — |
+| 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Queued | — |
+| 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
+| 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003` | Queued | DP-140 |
+| 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Queued | DP-010, DP-140 |
+| 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Queued | DP-140 |
+| 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Queued | — |
+| 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Queued | DP-160 |
+| 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Queued | DP-140 |
+| 31 | `DP-171` BiDi 核心实现 | `BIDI-001..002`, `INF-006` | Queued | DP-170 |
+| 32 | `DP-172` Streaming Logs | `LOG-003` | Queued | DP-171 |
+| 33 | `DP-173` XCUITest System Monitor | `XCUI-006` | Queued | DP-140, DP-171 |
+| 34 | `DP-174` XCUITest Network Monitor | `XCUI-007` | Queued | DP-140, DP-171 |
+| 35 | `DP-175` XCUITest Syslog / Crashlog | `XCUI-008` | Queued | DP-140, DP-171 |
+| 36 | `DP-190` 稳定版本收敛 | 选定范围 | Queued | 选定范围完成 |
+
+## 第一阶段：通用 HTTP 能力
+
+### DP-010 标准 Alert
+
+- 实现 `Session.AlertText`、`AcceptAlert`、`DismissAlert`、`SetAlertText`。
+- 使用标准 W3C Alert 命令并严格解码文本与 null。
+- 先解决能力矩阵中的 `CodeAlertNotFound` 评审；没有明确结论时停止。
+- 覆盖协议、错误、Delivery 和本地失败零远端请求。
+- 排除 `HasAlert`、按 label 处理、自动等待和自动重试。
+
+### DP-020 读取 Timeouts
+
+- 实现 `Session.Timeouts`，读取 Script、PageLoad、Implicit。
+- 区分缺失字段与零值；校验整数毫秒、负数和 `time.Duration` 溢出。
+- 不缓存远端结果，不修改现有 setter。
+
+### DP-030 Session Settings
+
+- 实现 `Session.Settings`、`Session.UpdateSettings` 和开放 `Settings` 类型。
+- 深拷贝返回值及需要保留的输入；更新只发送明确字段。
+- 不缓存、不 normalize、不维护 Driver setting 白名单。
+- 排除平台强类型 setting helper。
+
+### DP-040 Runtime Discovery 设计
+
+确定并写入 `docs/design.md`：
+
+- Appium、Driver、Plugin origin；
+- HTTP/BiDi command 与 Execute Method 类型；
+- 未知字段、深拷贝和 `Supports` 精确匹配规则。
+
+排除远端请求、缓存、自动门禁和 fallback。
+
+### DP-041 Runtime Discovery 实现
+
+- 实现 Commands、Extensions 快照读取和本地 `Supports`。
+- 使用 DP-040 类型；每次返回独立快照。
+- 普通 SDK 命令不得隐式调用 Discovery。
+- 排除缓存、自动门禁、fallback 和成功保证。
+
+## 第二阶段：视觉、等待与 Pull Logs
+
+### DP-050 Screenshot 资源模型
+
+- 增加 `MaxScreenshotResponseBytes` 和 `Session.ScreenshotTo(io.Writer)`。
+- `Screenshot` 与 `ScreenshotTo` 复用同一 Base64 解码路径。
+- 覆盖部分写入、Writer 失败和 context 结束。
+- 将 Screenshot 移入明确行为文件。
+- 排除 Element Screenshot、Viewport Screenshot 和裁剪。
+
+### DP-051 Element Screenshot
+
+- 实现 `Element.Screenshot`、`Element.ScreenshotTo`。
+- 复用 DP-050 的上限和解码路径。
+- 覆盖 stale、远端错误、解码错误和部分写入。
+- 排除自动滚动、可见性恢复、本地裁剪和坐标等价承诺。
+
+### DP-060 Viewport 坐标设计
+
+确定并写入 `docs/coordinate-system.md`：
+
+- `Rect`/`Point` 与 `PixelRect` 的边界；
+- 两 Driver 的 Viewport 语义；
+- orientation、status bar、scale 的事实边界；
+- 数值校验；
+- `ViewportRect` 不参与现有 Find/Tap。
+
+排除运行时代码和自动坐标转换。
+
+### DP-061 ViewportRect 实现
+
+- 实现 `PixelRect`、`Session.ViewportRect`。
+- 按远端 AutomationName 映射 Driver 命令；未知 Driver 本地拒绝。
+- 覆盖两 Driver 的严格协议测试。
+- 排除 Viewport Screenshot、隐式缩放和修改 Find/Tap。
+
+### DP-070 通用显式等待
+
+- 实现最小 `wait.Until`。
+- context 控制总期限；轮询间隔明确。
+- 条件可表达继续、成功和失败。
+- 排除 Session Timeout 修改、业务条件和 Session 恢复。
+
+### DP-071 Element 显式等待
+
+- 实现 `wait.Element`、`wait.Elements`，只调用公共 Find API。
+- 只重试明确为暂态的未找到结果，并保留最终错误。
+- 记录 Implicit Wait 与显式轮询叠加风险。
+- 排除 stale 自动恢复和 Element 自动重定位。
+
+### DP-080 Pull Logs 设计
+
+确定并写入 `docs/design.md`：
+
+- 开放 Log Type；
+- Log Entry、时间字段和未知字段；
+- 单次读取上限；
+- Driver 消费缓存语义；
+- Writer 形式是否有实际价值。
+
+排除 Streaming Logs 和 BiDi。
+
+### DP-081 Pull Logs 实现
+
+- 实现 Log Types 和按类型读取。
+- 增加 `MaxLogResponseBytes`。
+- 严格解码集合和条目，不假设读取会清空缓存。
+- 排除自动轮询、合并、去重和持续订阅。
+
+## 第三阶段：Context 与通用设备交互
+
+### DP-090 Web Context 几何设计
+
+确定并写入 `docs/design.md` 与 `docs/coordinate-system.md`：
+
+- Native/Web Context 识别；
+- DOM Element Rect 与浏览器 viewport；
+- Web Context 下 Find/Tap；
+- Context 切换后的本地状态；
+- Hybrid/Safari 的版本和 Host 验证边界。
+
+排除运行时代码。
+
+### DP-091 Context API 实现
+
+- 实现 Context 列表、当前 Context 和切换。
+- 严格解码；切换失败不推测本地状态。
+- 保持 Native 行为，实现 DP-090 的 Web 几何策略。
+- 排除自动 Context fallback 和未设计的 Hybrid 发现。
+
+### DP-100 Keyboard 语义设计
+
+确定并写入 `docs/design.md`：
+
+- 两 Driver 的键盘状态语义；
+- “发送关闭请求”与“确认已关闭”；
+- 公共入口和失败语义；
+- 无关闭按钮等限制。
+
+排除运行时代码、特殊键和 IME 管理。
+
+### DP-101 Keyboard 实现
+
+- 实现 DP-100 确认的公共入口。
+- 覆盖两 Driver 请求、响应和失败。
+- 不把 Driver 的尝试结果包装成确定事实。
+- 排除自动输入恢复和 IME 管理。
+
+### DP-110 应用放入后台
+
+- 实现只放入后台且不自动恢复的操作。
+- 恢复由现有 `ActivateApp` 显式执行。
+- 排除定时恢复和通用 Back。
+
+### DP-111 屏幕方向
+
+- 实现 Portrait/Landscape 强类型及读取、设置。
+- 严格解码且不缓存状态。
+- 覆盖两 Driver；排除空间 Rotation。
+
+### DP-120 活动 App ID
+
+- 实现统一前台 App ID。
+- 显式映射 iOS bundle ID 与 Android package。
+- 不从 Capability 猜测；排除进程枚举和安装信息。
+
+### DP-121 设备时间
+
+- 实现可校验的设备时间结果。
+- 不静默回退 Host 时间。
+- 记录 Driver/Host 差异；排除时间和时区设置。
+
+### DP-130 Deep Link
+
+- 实现通用 Deep Link。
+- 按远端 AutomationName 映射 iOS `bundleId` 与 Android `package`。
+- 未知 Driver 本地拒绝。
+- 排除浏览器历史、通用 Back 和页面自动断言。
+
+## 第四阶段：兼容性与平台能力
+
+### DP-140 兼容性矩阵结构
+
+在 `docs/compatibility.md` 定义：
+
+- Runtime Profile 和逐能力验证记录；
+- SDK、Appium、Driver、WDA/UiAutomator2 Server、设备 OS/类型、Host OS、连接和启动方式；
+- iOS 17.x macOS、iOS 18+ RemoteXPC 三 Host、低于 iOS 17 Legacy Lane；
+- Android/UiAutomator2 对等结构；
+- `Official`、`BestEffort` 与本项目 `Verified` 的区别。
+
+不得把未实测组合标记为 `Verified`。
+
+### DP-141 跨 Host Smoke
+
+实际环境具备后：
+
+- 使用同一公共 API smoke suite 分别验证 macOS、Windows、Linux。
+- iOS 17 与 iOS 18+ 分开记录。
+- 失败记录限制，不修改 SDK 伪造兼容。
+
+### DP-150 XCUITest Picker Wheel
+
+- 实现强类型方向和 offset。
+- 校验 Session、Element 归属和 XCUITest Driver。
+- 不重复普通 Swipe。
+
+### DP-151 XCUITest Alert label
+
+- 只实现标准 Alert 无法表达的 label 增量。
+- 空 label 本地拒绝；Driver mismatch 零远端请求。
+- 不重复根包 Accept/Dismiss。
+
+### DP-152 XCUITest Simulated Location
+
+- 实现 Get/Set/Reset 和稳定位置类型。
+- 校验数值范围，明确 iOS、Driver/WDA 和 Host 条件。
+- 不合并旧混合 GeoLocation API。
+
+### DP-160 UiAutomator2 Driver 门禁
+
+- 只使用远端确认的 AutomationName。
+- 不 normalize、不探测、不调用 Healthy。
+- mismatch 返回 `CodeUnsupported + DeliveryNotSent`。
+- 不新增 Android 公共平台函数。
+
+### DP-161 UiAutomator2 能力复审
+
+评审 `UIA-002..004`：
+
+- 真实使用场景和收益；
+- 通用能力是否已有可靠替代；
+- Host 可移植性；
+- 通过项从 `Deferred` 调整为 `Accepted`。
+
+同一任务不实现通过评审的能力。
+
+## 第五阶段：BiDi 与持续事件
+
+### DP-170 BiDi 模型设计
+
+确定并写入 `docs/design.md`，必要时新增 ADR：
+
+- Endpoint、连接建立和根 Session 所有权；
+- command ID、响应和事件关联；
+- 订阅及消费者语义；
+- context、Session Close 和远端关闭；
+- 单消息、队列和累计上限；
+- 溢出结果、WebSocket 依赖和不自动重连边界。
+
+排除 Streaming Logs 和平台监控实现。
+
+### DP-171 BiDi 核心实现
+
+- 实现 `internal/bidi`、Fake BiDi Server 和 Session 绑定的公共订阅入口。
+- 不创建独立公共 BiDi Client。
+- 实现有界消息、队列、取消和关闭。
+- 覆盖关联、协议错误、溢出和并发关闭。
+- 运行 `go test -race ./...`。
+- 排除自动重连和具体监控。
+
+### DP-172 Streaming Logs
+
+- 实现开放事件类型以及订阅、取消、关闭和溢出。
+- 与 Pull Logs 保持独立语义。
+- 排除 XCUITest DVT typed events。
+
+### DP-173 XCUITest System Monitor
+
+- 实现 iOS 18+ 真机 RemoteXPC/BiDi 控制和 typed event。
+- 记录第一帧、采样周期和非连续真值边界。
+- 完成协议测试和三 Host 验证清单；真实结果只写入兼容性文档。
+
+### DP-174 XCUITest Network Monitor
+
+- 分层定义 interface、connection、traffic sample 和 serial 关联。
+- 明确不是 HTTP 抓包。
+- 完成协议测试、资源边界和三 Host 验证清单。
+
+### DP-175 XCUITest Syslog / Crashlog
+
+- 分开定义 syslog 与 crashlog 生命周期。
+- 定义 typed event、未知字段、敏感数据和队列边界。
+- 不把完整日志写入 Observer 或默认错误。
+- 完成协议测试和三 Host 验证清单。
+
+## 第六阶段：稳定版本收敛
+
+### DP-190 稳定版本收敛
+
+- 审查选定范围内的导出 API、GoDoc、命名、零值和包边界。
+- 确认根包与平台包无重复能力，平台导出函数使用 `IOS` / `Android` 前缀。
+- 完成命令、错误、坐标、兼容性和发布文档。
+- 运行完整 `go test ./...`、`go test -race ./...` 和声明环境的 smoke suite。
+- 未验证组合不作稳定承诺。
+- 不为表面 API 完整加入未规划能力。

@@ -31,7 +31,7 @@
 - 高层对象、包和运行通道：`docs/architecture.md`
 - 详细设计与设计决策：`docs/design.md`
 - 能力范围、状态与验证等级：`docs/sdk-capability-matrix.md`
-- 实施顺序与验收条件：`docs/development-plan.md`（建立后）
+- 实施顺序与验收条件：`docs/development-plan.md`
 - Go 编码约定：`docs/go-conventions.md`
 - 命令请求、响应、副作用与失败语义：`docs/command-semantics.md`
 - Error、Delivery 与诊断数据：`docs/error-model.md`
