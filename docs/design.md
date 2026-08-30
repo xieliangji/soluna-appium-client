@@ -213,82 +213,145 @@ Setting 白名单、不自动规范化值，也不根据一次更新推测后续
 ### 6.1 Runtime Discovery Catalog 公共模型
 
 DP-040 只确定 Runtime Discovery 的公共模型和跨领域边界；远端命令与解码实现
-由 DP-041 完成。目录分为 `CommandCatalog` 和 `ExtensionCatalog`，两者的条目
-都使用同一个稳定结构：
+由 DP-041 完成。公共模型保留 Appium 3 `ListCommandsResponse` /
+`ListExtensionsResponse` 的层级和三类真实 identity，不把不同协议对象压成一个
+字符串：
 
 ```go
-type CatalogEntry struct {
+type CatalogSourceKind string
+
+const (
+    CatalogSourceBase   CatalogSourceKind = "base"
+    CatalogSourceDriver CatalogSourceKind = "driver"
+    CatalogSourcePlugin CatalogSourceKind = "plugin"
+)
+
+type CatalogSource struct {
+    Kind       CatalogSourceKind
+    PluginName string // 仅 Kind == CatalogSourcePlugin 时有值
+}
+
+type CatalogMetadata struct {
+    Command    *string
+    Deprecated *bool
+    Info       *string
+    Params     []string
+    Extra      map[string]any
+}
+
+type HTTPCommand struct {
+    CatalogMetadata
+    Source CatalogSource
+    Path   string
+    Method string
+}
+
+type BiDiCommand struct {
+    CatalogMetadata
+    Source CatalogSource
+    Domain string
     Name   string
-    Origin CatalogOrigin
-    Kind   CatalogKind
-    Extra  map[string]any
+}
+
+type ExecuteMethod struct {
+    CatalogMetadata
+    Source CatalogSource
+    Name   string
+}
+
+type HTTPCommandGroup struct {
+    Entries []HTTPCommand
+    Extra   map[string]any
+}
+
+type BiDiCommandGroup struct {
+    Entries []BiDiCommand
+    Extra   map[string]any
+}
+
+type ExecuteMethodGroup struct {
+    Entries []ExecuteMethod
+    Extra   map[string]any
 }
 
 type CommandCatalog struct {
-    Entries []CatalogEntry
+    Rest  *RestCommandCatalog
+    BiDi  *BiDiCommandCatalog
+    Extra map[string]any
+}
+
+type RestCommandCatalog struct {
+    Base    *HTTPCommandGroup
+    Driver  *HTTPCommandGroup
+    Plugins map[string]*HTTPCommandGroup
+    Extra   map[string]any
+}
+
+type BiDiCommandCatalog struct {
+    Base    *BiDiCommandGroup
+    Driver  *BiDiCommandGroup
+    Plugins map[string]*BiDiCommandGroup
     Extra   map[string]any
 }
 
 type ExtensionCatalog struct {
-    Entries []CatalogEntry
-    Extra   map[string]any
+    Rest  *RestExtensionCatalog
+    Extra map[string]any
 }
 
-type CatalogOrigin string
-
-const (
-    CatalogOriginUnknown CatalogOrigin = ""
-    CatalogOriginAppium  CatalogOrigin = "appium"
-    CatalogOriginDriver  CatalogOrigin = "driver"
-    CatalogOriginPlugin  CatalogOrigin = "plugin"
-)
-
-type CatalogKind string
-
-const (
-    CatalogKindUnknown       CatalogKind = ""
-    CatalogKindHTTP          CatalogKind = "http"
-    CatalogKindBiDi          CatalogKind = "bidi"
-    CatalogKindExecuteMethod CatalogKind = "execute_method"
-)
+type RestExtensionCatalog struct {
+    Driver  *ExecuteMethodGroup
+    Plugins map[string]*ExecuteMethodGroup
+    Extra   map[string]any
+}
 ```
 
-`CatalogOrigin` 的标准值为 `appium`、`driver` 和 `plugin`，分别表示 Appium
-核心、当前 Driver 和当前 Plugin 提供的条目。`CatalogKind` 的标准值为：
+HTTP command 的 identity 是 `Source + Path + Method`；BiDi command 的 identity
+是 `Source + Domain + Name`；Execute Method 的 identity 是 `Source + Name`。
+`Command` 是远端条目的可选元数据，不能代替上述 identity；它缺失时仍是合法
+条目。Path、Method、Domain、Name 以及 plugin map key 是协议对象的结构性标识，
+必须非空并按原始字符串保存，不拼接、不 trim、不大小写折叠。
 
-| Kind | 含义 | 实际执行通道 |
-|---|---|---|
-| `http` | Appium/W3C HTTP command | 根包 Session 的统一 HTTP 执行链 |
-| `bidi` | WebDriver BiDi command | 绑定同一 Session 的内部 BiDi 通道 |
-| `execute_method` | Appium Execute Method（例如 `mobile: ...`） | 根包 Session 的 Execute Script 能力 |
+`CatalogSourceKind` 由响应所在的结构分支确定：`base`、`driver` 或
+`plugins[pluginName]`。PluginName 是稳定事实，不能只用一个 plugin 枚举代替。
+Source 不是远端条目里的自由字符串；未知的未来顶层 section 或分支字段放入
+对应 `Extra`，客户端不得根据 endpoint、名称前缀或命令格式猜测来源。
 
-`Origin` 和 `Kind` 都是可扩展的 string 类型。远端返回的未知非空值必须原样
-保留；缺失值保持 `Unknown` 零值。客户端不得根据 endpoint、名称前缀或
-命令格式推断来源或类型。
+`CatalogMetadata` 的 `Command`、`Deprecated`、`Info` 和 `Params` 均为可选字段：
+字段缺失合法，显式空数组与缺失仍按 JSON 存在性区分；已知字段出现 `null` 或
+其他错误类型时视为响应格式错误。`Command` 即使缺失，也不会影响 HTTP、BiDi
+或 Execute Method 的结构性 identity。
 
-`Name` 是远端提供的命令或扩展标识符，必须非空并按原始字符串保存。目录条目
-保持远端顺序；除非远端协议明确保证唯一性，客户端不去重。`Extra` 保存目录或
-条目中未被稳定字段表达的未知字段，包含其中的嵌套 map/slice，并在每次返回时
-递归深拷贝。无法解码为预期目录结构、已知字段类型错误或条目标识符缺失时，
-整体返回 `CodeResponseInvalid`，不返回部分目录。
+`CommandCatalog.Rest`、`CommandCatalog.BiDi` 和 `ExtensionCatalog.Rest` 为可选
+section：nil 表示响应中缺失，非 nil 的空结构表示远端明确返回了空 object，
+两者不得混淆。每个 section 内的 `Base`、`Driver` 和 `Plugins` 同样保留缺失与
+显式空 object 的区别；Plugins map 的 nil 表示缺失，非 nil 空 map 表示显式空
+object。Commands 不要求 Rest 或 BiDi 至少有一个存在；Extensions 不要求 Rest
+存在，因此空顶层 object 是合法的空目录。
+
+动态 path、method、domain、command name 和 execute method name 是已知结构键，
+由 DP-041 展开为对应 Group 的 Entries；未知字段保存在目录、section 或条目
+`CatalogMetadata.Extra` 中，并对嵌套 map/slice 递归深拷贝。目录返回不承诺 map
+键顺序；客户端不依赖顺序，也不去重。无法解码为预期层级、已知元数据类型错误
+或结构性标识符为空时，整体返回 `CodeResponseInvalid`，不返回部分目录。
 
 `Session.Commands(ctx)` 和 `Session.Extensions(ctx)` 每次分别读取
 `GET /session/{id}/appium/commands` 与
 `GET /session/{id}/appium/extensions`，不建立 Session 缓存。GET 请求不带 body，
-也不发送 `Content-Type`。两者返回的新目录及其 `Entries`、`Extra` 均与之前调用
-独立；调用方修改快照不会影响后续读取。
+也不发送 `Content-Type`。每次返回的新目录及其所有子结构均独立；调用方修改
+快照不会影响后续读取。
 
-目录类型提供纯本地 `Supports(name string) bool` helper。helper 只对 `Name`
-执行区分大小写、逐字节相等的精确匹配：不 trim、不做大小写折叠、不接受前缀、
-通配符或别名；空名称始终返回 false。`Supports` 不发起远端请求，也不检查
-Origin、Kind 或 Extra，更不表示命令在当前设备状态下一定能够成功。
-
-两个目录类型都提供同名 helper：
+目录类型提供按 identity 分开的纯本地 helper：
 
 ```go
-func (c CommandCatalog) Supports(name string) bool
-func (c ExtensionCatalog) Supports(name string) bool
+func (c CommandCatalog) SupportsHTTP(method, path string) bool
+func (c CommandCatalog) SupportsBiDi(domain, name string) bool
+func (c ExtensionCatalog) SupportsExecuteMethod(name string) bool
 ```
+
+Helper 只执行区分大小写、逐字节相等的精确匹配，不 trim、不做大小写折叠、不接受
+前缀、通配符、别名或拼接格式；空参数始终返回 false。Helper 不发起远端请求，
+不检查 Source、CatalogMetadata 或设备状态，也不表示实际命令一定能够成功。
 
 Runtime Discovery 只回答“当前 Session 登记了什么”，不能推导：
 
@@ -585,7 +648,7 @@ internal/bidi       BiDi 协议实现
 | AD-021 | Accepted | Runtime Discovery 不作为普通命令的自动门禁、fallback 或成功保证 | 实际命令仍返回真实远端结果 |
 | AD-022 | Accepted | SDK 只公开根包 `appium.Client`；平台包不定义 Client 或 Session wrapper | 调用方始终使用同一 Client/Session 对象模型 |
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
-| AD-024 | Accepted | Runtime Discovery 使用带 Origin/Kind 的稳定 Catalog 条目；未知字段递归保留，Supports 只做精确匹配 | 保留 Appium/Driver/Plugin 事实，避免目录查询产生隐式能力推断 |
+| AD-024 | Accepted | Runtime Discovery 按 Source 与协议 identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

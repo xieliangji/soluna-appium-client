@@ -74,7 +74,9 @@ Runtime Discovery 目录：
 | `Session.Extensions` | GET | `/session/{sessionId}/appium/extensions` | 无 | Appium 3 extension catalog，解码为 `ExtensionCatalog` |
 
 请求不带 body，也不发送 `Content-Type`。每次调用都重新读取远端，不缓存目录。
-目录条目的 `Origin`、`Kind` 和未知字段遵循 `docs/design.md` 的 Catalog 模型；
-非法目录结构、缺失标识符或无法解码的已知字段返回 `CodeResponseInvalid`，
+目录条目的三类 identity、`base`/`driver`/`plugins[pluginName]` 来源层级、可选
+section 和未知字段遵循 `docs/design.md` 的 Catalog 模型。Commands 的 `rest` /
+`bidi` 与 Extensions 的 `rest` section 都可缺失；缺失与显式空 object 必须区分。
+非法目录结构、空的结构性标识符或无法解码的已知字段返回 `CodeResponseInvalid`，
 Delivery 为 `DeliveryAcknowledged`。本节定义 DP-041 的协议边界，DP-040 本身
 不增加运行时 API 或远端请求。

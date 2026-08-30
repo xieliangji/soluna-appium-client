@@ -90,8 +90,10 @@
 - HTTP/BiDi command 与 Execute Method 类型；
 - 未知字段、深拷贝和 `Supports` 精确匹配规则。
 
-已固定 `CommandCatalog`、`ExtensionCatalog` 和 `CatalogEntry` 公共模型；具体
-HTTP 命令、解码和本地 helper 在 DP-041 实现。
+已废弃原先的扁平 `CatalogEntry{Name, Origin, Kind, Extra}` 模型，改为按
+Appium 3 `rest`/`bidi`/`base`/`driver`/`plugins[name]` 层级表达 HTTP、BiDi 和
+Execute Method 三类 identity，并固定可选 section 的缺失与空 object 语义；
+具体 HTTP 命令、解码和本地 helper 在 DP-041 实现。
 
 排除远端请求、缓存、自动门禁和 fallback。
 
