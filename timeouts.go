@@ -20,12 +20,27 @@ const (
 	setImplicitWaitOperation    = "set_implicit_wait"
 )
 
-// Timeouts 表示 Appium Get Timeouts 返回的当前超时配置。
+// Timeouts 表示 WebDriver Session 当前使用的超时配置。
 //
-// Command 表示 Appium 当前 command timeout，Implicit 表示元素查找使用的
-// implicit timeout，均使用 Go 的 time.Duration 表示。该类型不包含 SetTimeout 请求中的
-// Script/PageLoad 字段，因为 Appium 3 的 Get Timeouts 响应不返回它们。
+// 所有超时均使用 Go 的 time.Duration 表示。具体的协议传输层负责在
+// time.Duration 与 WebDriver 使用的毫秒值之间转换。该类型用于设置超时，
+// 保持既有 Script、PageLoad 和 Implicit 字段语义。
 type Timeouts struct {
+	// Script 表示脚本执行超时时间。
+	Script time.Duration
+
+	// PageLoad 表示页面加载超时时间。
+	PageLoad time.Duration
+
+	// Implicit 表示元素查找使用的隐式等待超时时间。
+	Implicit time.Duration
+}
+
+// CurrentTimeouts 表示 Appium 3 Get Timeouts 返回的当前超时状态。
+//
+// Appium 3 的读取响应只包含 Command 和 Implicit；Script 与 PageLoad
+// 仍保留在用于设置超时的 Timeouts 类型中。
+type CurrentTimeouts struct {
 	// Command 表示 Appium command timeout。
 	Command time.Duration
 
@@ -38,10 +53,10 @@ type Timeouts struct {
 // 远端返回值必须包含 command 和 implicit 字段。字段值必须是非负整数毫秒，
 // 且能够安全转换为 time.Duration。方法每次调用都会
 // 读取远端结果，不缓存之前的响应。
-func (s *Session) Timeouts(ctx context.Context) (Timeouts, error) {
+func (s *Session) Timeouts(ctx context.Context) (CurrentTimeouts, error) {
 	client, err := s.commandClient(getTimeoutsOperation)
 	if err != nil {
-		return Timeouts{}, err
+		return CurrentTimeouts{}, err
 	}
 
 	command, err := wire.NewCommand(
@@ -52,14 +67,14 @@ func (s *Session) Timeouts(ctx context.Context) (Timeouts, error) {
 		"timeouts",
 	)
 	if err != nil {
-		return Timeouts{}, commandDefinitionError(
+		return CurrentTimeouts{}, commandDefinitionError(
 			getTimeoutsOperation,
 			"get timeouts command definition is invalid",
 			err,
 		)
 	}
 
-	var timeouts Timeouts
+	var timeouts CurrentTimeouts
 	err = client.executeCommand(
 		ctx,
 		command,
@@ -76,7 +91,7 @@ func (s *Session) Timeouts(ctx context.Context) (Timeouts, error) {
 		},
 	)
 	if err != nil {
-		return Timeouts{}, err
+		return CurrentTimeouts{}, err
 	}
 
 	return timeouts, nil
@@ -237,9 +252,9 @@ func timeoutMilliseconds(
 func decodeTimeouts(
 	ctx context.Context,
 	value json.RawMessage,
-) (Timeouts, error) {
+) (CurrentTimeouts, error) {
 	if err := ctx.Err(); err != nil {
-		return Timeouts{}, err
+		return CurrentTimeouts{}, err
 	}
 
 	var payload struct {
@@ -247,7 +262,7 @@ func decodeTimeouts(
 		Implicit json.RawMessage `json:"implicit"`
 	}
 	if err := json.Unmarshal(value, &payload); err != nil {
-		return Timeouts{}, fmt.Errorf("decode timeouts response: %w", err)
+		return CurrentTimeouts{}, fmt.Errorf("decode timeouts response: %w", err)
 	}
 
 	command, err := decodeTimeoutDuration(
@@ -256,7 +271,7 @@ func decodeTimeouts(
 		payload.Command,
 	)
 	if err != nil {
-		return Timeouts{}, err
+		return CurrentTimeouts{}, err
 	}
 
 	implicit, err := decodeTimeoutDuration(
@@ -265,10 +280,10 @@ func decodeTimeouts(
 		payload.Implicit,
 	)
 	if err != nil {
-		return Timeouts{}, err
+		return CurrentTimeouts{}, err
 	}
 
-	return Timeouts{
+	return CurrentTimeouts{
 		Command:  command,
 		Implicit: implicit,
 	}, nil

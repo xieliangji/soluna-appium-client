@@ -24,11 +24,12 @@
 
 ## Timeouts 响应错误
 
-`Session.Timeouts` 对 `command` 或 `implicit` 字段缺失、显式 `null`、负数、
+`Session.Timeouts` 返回 `CurrentTimeouts`，并对 `command` 或 `implicit` 字段缺失、显式 `null`、负数、
 非整数毫秒或超出 `time.Duration` 范围的字段返回 `CodeResponseInvalid`，
 Delivery 为 `DeliveryAcknowledged`。显式零毫秒是合法值，不会被当作字段缺失。
 Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 或
-`pageLoad`。
+`pageLoad`。用于设置超时的既有 `Timeouts` 公共类型保持 `Script`、`PageLoad`
+和 `Implicit` 字段，不因读取结果模型改变。
 
 ## Delivery
 

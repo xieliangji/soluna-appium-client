@@ -29,7 +29,8 @@
 
 ## Session Timeouts
 
-`Session.Timeouts` 每次读取 Appium 3 Get Timeouts 命令：
+`Session.Timeouts` 每次读取 Appium 3 Get Timeouts 命令，并返回独立的
+`CurrentTimeouts` 结果类型：
 
 ```text
 GET /session/{sessionId}/timeouts
@@ -40,3 +41,5 @@ JSON object；字段值必须是非负整数毫秒。零是有效值，字段缺
 均属于响应格式错误。整数值超出 `time.Duration` 可表示范围时同样返回
 `CodeResponseInvalid`。读取结果不在 Session 本地缓存。SetTimeout 请求中的
 `script`、`pageLoad`、`implicit` 字段不承诺会从该读取命令中原样返回。
+用于设置超时的既有 `Timeouts` 类型仍保留 `Script`、`PageLoad` 和 `Implicit`
+字段；读取结果的 `Command`、`Implicit` 不会改变该公共类型的语义。

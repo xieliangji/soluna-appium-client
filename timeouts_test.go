@@ -10,6 +10,20 @@ import (
 	"github.com/xieliangji/soluna-appium-client/contracttest"
 )
 
+func TestTimeoutsPublicTypeRetainsSetterFields(t *testing.T) {
+	configured := appium.Timeouts{
+		Script:   1 * time.Second,
+		PageLoad: 2 * time.Second,
+		Implicit: 3 * time.Second,
+	}
+
+	if configured.Script != time.Second ||
+		configured.PageLoad != 2*time.Second ||
+		configured.Implicit != 3*time.Second {
+		t.Fatalf("unexpected timeout configuration: %#v", configured)
+	}
+}
+
 func TestSessionTimeoutSetters(t *testing.T) {
 	recorder := contracttest.NewRecorder(
 		http.HandlerFunc(

@@ -144,6 +144,8 @@ Observer: finished
 Appium 3 的 Get Timeouts 响应按实际 `GetTimeoutsResult` 建模为 `command` 和
 `implicit` 两个数值超时。SDK 不根据 SetTimeout 请求中可发送的 `script` 或
 `pageLoad` 字段推断读取结果，也不将 W3C 理论模型强行补齐为 Appium 未返回的字段。
+读取结果使用独立的 `CurrentTimeouts` 类型；既有用于设置超时的 `Timeouts`
+公共类型继续保留 `Script`、`PageLoad` 和 `Implicit` 字段，以避免无关的 API 破坏。
 
 ### 4.2 命令投递状态
 

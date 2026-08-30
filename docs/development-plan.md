@@ -70,6 +70,8 @@
 ### DP-020 读取 Timeouts
 
 - 实现 `Session.Timeouts`，按 Appium 3 Get Timeouts 读取 Command、Implicit。
+- 返回独立的 `CurrentTimeouts` 结果类型，保留既有 `Timeouts` 设置类型及其
+  `Script`、`PageLoad`、`Implicit` 字段，避免无关的公共 API 破坏。
 - 区分缺失字段、显式 null 与零值；校验整数毫秒、负数和 `time.Duration` 溢出。
 - 不缓存远端结果，不修改现有 setter。
 
