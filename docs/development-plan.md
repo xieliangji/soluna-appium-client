@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-010`（已完成；下一项需显式选择）
+> 当前计划项：`DP-020`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -21,7 +21,7 @@
 | 顺序 | 计划项 | 能力 ID | 状态 | 硬前置 |
 |---:|---|---|---|---|
 | 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Done | — |
-| 2 | `DP-020` 读取 Timeouts | `CFG-002` | Queued | — |
+| 2 | `DP-020` 读取 Timeouts | `CFG-002` | Done | — |
 | 3 | `DP-030` Session Settings | `CFG-003..004` | Queued | — |
 | 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Queued | — |
 | 5 | `DP-041` Runtime Discovery 实现 | `DISC-001..003` | Queued | DP-040 |

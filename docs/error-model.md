@@ -22,6 +22,12 @@
 - 成功响应 value 类型不符合命令契约时返回 `CodeResponseInvalid`，
   Delivery 为 `DeliveryAcknowledged`。
 
+## Timeouts 响应错误
+
+`Session.Timeouts` 对缺失、`null`、负数、非整数毫秒或超出
+`time.Duration` 范围的字段返回 `CodeResponseInvalid`，Delivery 为
+`DeliveryAcknowledged`。显式零毫秒是合法值，不会被当作字段缺失。
+
 ## Delivery
 
 - `DeliveryNotSent`：调用方 context 已结束、参数无效或请求构造失败，

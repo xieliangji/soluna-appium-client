@@ -26,3 +26,16 @@
 成功响应必须是 W3C envelope，命令级 value 按上表严格解码。
 远端 `no such alert` 是已确认收到响应的命令失败，Delivery 为
 `DeliveryAcknowledged`，并映射为 `CodeAlertNotFound`。
+
+## Session Timeouts
+
+`Session.Timeouts` 每次读取标准 W3C 命令：
+
+```text
+GET /session/{sessionId}/timeouts
+```
+
+请求不带 body。成功值必须是同时包含 `script`、`pageLoad` 和 `implicit`
+三个字段的 JSON object；字段值必须是非负整数毫秒。零是有效值，字段缺失
+或显式 `null` 均属于响应格式错误。毫秒值超出 `time.Duration` 可表示范围时
+同样返回 `CodeResponseInvalid`。读取结果不在 Session 本地缓存。

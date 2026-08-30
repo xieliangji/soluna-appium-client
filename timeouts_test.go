@@ -308,3 +308,122 @@ func TestSessionTimeoutsRejectInvalidDurationBeforeDelivery(t *testing.T) {
 		)
 	}
 }
+
+func TestSessionTimeoutsProtocolAndNoCache(t *testing.T) {
+	requestCount := 0
+	recorder := contracttest.NewRecorder(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		switch {
+		case request.Method == http.MethodPost && request.RequestURI == "/session":
+			_, _ = writer.Write([]byte(`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`))
+		case request.Method == http.MethodGet && request.RequestURI == "/session/session%2Fid/timeouts":
+			requestCount++
+			if requestCount == 1 {
+				_, _ = writer.Write([]byte(`{"value":{"script":0,"pageLoad":12345,"implicit":2500}}`))
+				return
+			}
+			_, _ = writer.Write([]byte(`{"value":{"script":1,"pageLoad":2,"implicit":3}}`))
+		default:
+			http.NotFound(writer, request)
+		}
+	}))
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+	client, err := server.NewClient(appium.ClientOptions{})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	session, err := client.CreateSession(context.Background(), appium.MatchCapabilities(appium.Capabilities{
+		"platformName": "iOS", "appium:automationName": "XCUITest",
+	}))
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	first, err := session.Timeouts(context.Background())
+	if err != nil {
+		t.Fatalf("read first timeouts: %v", err)
+	}
+	if first.Script != 0 || first.PageLoad != 12345*time.Millisecond || first.Implicit != 2500*time.Millisecond {
+		t.Fatalf("unexpected first timeouts: %#v", first)
+	}
+	second, err := session.Timeouts(context.Background())
+	if err != nil {
+		t.Fatalf("read second timeouts: %v", err)
+	}
+	if second.Script != time.Millisecond || second.PageLoad != 2*time.Millisecond || second.Implicit != 3*time.Millisecond {
+		t.Fatalf("unexpected second timeouts: %#v", second)
+	}
+	if requestCount != 2 {
+		t.Fatalf("expected two remote reads, got %d", requestCount)
+	}
+	for _, request := range recorder.Requests()[1:] {
+		if len(request.Body) != 0 {
+			t.Fatalf("GET timeouts must not send a request body: %s", request.Body)
+		}
+	}
+}
+
+func TestSessionTimeoutsRejectInvalidResponses(t *testing.T) {
+	tests := []struct {
+		name     string
+		response string
+	}{
+		{name: "missing field", response: `{"value":{"script":1,"pageLoad":2}}`},
+		{name: "null field", response: `{"value":{"script":1,"pageLoad":null,"implicit":2}}`},
+		{name: "negative", response: `{"value":{"script":-1,"pageLoad":2,"implicit":3}}`},
+		{name: "fractional", response: `{"value":{"script":1.5,"pageLoad":2,"implicit":3}}`},
+		{name: "duration overflow", response: `{"value":{"script":9223372036855,"pageLoad":2,"implicit":3}}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			session, _ := newTimeoutTestSession(t, test.response)
+			_, err := session.Timeouts(context.Background())
+			if err == nil || !appium.IsErrorCode(err, appium.CodeResponseInvalid) {
+				t.Fatalf("expected response invalid error, got %v", err)
+			}
+			if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
+				t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
+			}
+		})
+	}
+}
+
+func TestSessionTimeoutsCanceledBeforeDelivery(t *testing.T) {
+	session, recorder := newTimeoutTestSession(t, `{"value":{"script":1,"pageLoad":2,"implicit":3}}`)
+	recorder.Reset()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := session.Timeouts(ctx)
+	if err == nil || !appium.IsErrorCode(err, appium.CodeCanceled) {
+		t.Fatalf("expected canceled error, got %v", err)
+	}
+	if requests := recorder.Requests(); len(requests) != 0 {
+		t.Fatalf("canceled timeout read must not be delivered: got %d requests", len(requests))
+	}
+}
+
+func newTimeoutTestSession(t *testing.T, response string) (*appium.Session, *contracttest.Recorder) {
+	t.Helper()
+	recorder := contracttest.NewRecorder(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		writer.Header().Set("Content-Type", "application/json")
+		if request.Method == http.MethodPost && request.RequestURI == "/session" {
+			_, _ = writer.Write([]byte(`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`))
+			return
+		}
+		_, _ = writer.Write([]byte(response))
+	}))
+	server := contracttest.NewServer(recorder)
+	t.Cleanup(server.Close)
+	client, err := server.NewClient(appium.ClientOptions{})
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+	session, err := client.CreateSession(context.Background(), appium.MatchCapabilities(appium.Capabilities{
+		"platformName": "iOS", "appium:automationName": "XCUITest",
+	}))
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+	return session, recorder
+}

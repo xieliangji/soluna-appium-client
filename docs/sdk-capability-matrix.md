@@ -102,7 +102,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | CORE-004 | `Session.Healthy` | Session method | Implemented | `WindowRect` operational probe | Driver 必须支持 Window Rect | Protocol | `session.go`, `session_health_test.go` |
 | CORE-005 | `Session.Close` 与创建失败清理 | Session method | Implemented | W3C Delete Session | Appium 3 | Protocol | `session.go`, `session_test.go` |
 | CFG-001 | 设置 Script/PageLoad/Implicit Timeout | Session method | Implemented | W3C Timeouts | Driver 可能忽略不适用字段 | Protocol | `timeouts.go`, `timeouts_test.go` |
-| CFG-002 | 读取当前 Timeouts | Session method | Accepted | W3C Get Timeouts | Driver 返回值必须严格校验 | None | 增加 `Session.Timeouts` |
+| CFG-002 | 读取当前 Timeouts | Session method | Implemented | W3C Get Timeouts | Driver 返回值必须严格校验整数毫秒、非负和 `time.Duration` 溢出 | Protocol | `timeouts.go`, `timeouts_test.go`, `docs/command-semantics.md` |
 | CFG-003 | 读取 Session Settings | Session method | Accepted | Appium `GET /appium/settings` | Setting 键值由 Driver/Plugin 定义 | None | 增加 `Settings` 开放类型 |
 | CFG-004 | 增量更新 Session Settings | Session method | Accepted | Appium `POST /appium/settings` | 不缓存远端状态 | None | 增加 `UpdateSettings` |
 | DISC-001 | 读取 Command Catalog | Session method | Accepted | Appium Runtime Discovery | Appium 3 | None | 增加 `Session.Commands` |
