@@ -19,6 +19,7 @@ const (
 	CodeCommandFailed    ErrorCode = "command_failed"     // 远端命令执行失败
 	CodeSessionLost      ErrorCode = "session_lost"       // WebDriver Session 已丢失或失效
 	CodeElementNotFound  ErrorCode = "element_not_found"  // 未找到目标元素
+	CodeAlertNotFound    ErrorCode = "alert_not_found"    // 当前没有可操作的 Alert
 	CodeElementStale     ErrorCode = "element_stale"      // 元素引用已经失效
 	CodeUnsupported      ErrorCode = "unsupported"        // 当前命令或能力不受支持
 )

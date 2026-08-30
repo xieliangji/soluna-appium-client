@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-010`  
+> 当前计划项：`DP-010`（已完成；下一项需显式选择）
 > 最后更新：2026-08-30
 
 ## Agent 执行约束
@@ -20,7 +20,7 @@
 
 | 顺序 | 计划项 | 能力 ID | 状态 | 硬前置 |
 |---:|---|---|---|---|
-| 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Ready | — |
+| 1 | `DP-010` 标准 Alert | `ALERT-001..003` | Done | — |
 | 2 | `DP-020` 读取 Timeouts | `CFG-002` | Queued | — |
 | 3 | `DP-030` Session Settings | `CFG-003..004` | Queued | — |
 | 4 | `DP-040` Runtime Discovery 设计 | `DISC-001..003` | Queued | — |
@@ -63,7 +63,7 @@
 
 - 实现 `Session.AlertText`、`AcceptAlert`、`DismissAlert`、`SetAlertText`。
 - 使用标准 W3C Alert 命令并严格解码文本与 null。
-- 先解决能力矩阵中的 `CodeAlertNotFound` 评审；没有明确结论时停止。
+- `no such alert` 映射为独立的 `CodeAlertNotFound`，因为该 W3C 错误明确表示 Alert 资源不存在，调用方可据此区分通用命令失败。
 - 覆盖协议、错误、Delivery 和本地失败零远端请求。
 - 排除 `HasAlert`、按 label 处理、自动等待和自动重试。
 

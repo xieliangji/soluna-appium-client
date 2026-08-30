@@ -447,6 +447,9 @@ func mapRemoteErrorCode(remoteCode string) ErrorCode {
 	case "no such element":
 		return CodeElementNotFound
 
+	case "no such alert":
+		return CodeAlertNotFound
+
 	case "stale element reference":
 		return CodeElementStale
 
