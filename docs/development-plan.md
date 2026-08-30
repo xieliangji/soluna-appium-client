@@ -133,13 +133,15 @@ Execute Method 三类 execution identity，并固定 Source provenance、`params
 - 数值校验；
 - `ViewportRect` 不参与现有 Find/Tap。
 
-已固定两个坐标空间及其公共类型边界：`Rect`/`Point` 继续表示 WebDriver
-几何，`PixelRect` 表示整数截图像素；XCUITest 与 UiAutomator2 的
+已固定 WebDriver 几何、Driver 像素几何和具体 Screenshot 像素平面的边界：
+`Rect`/`Point` 继续表示 WebDriver 几何，`PixelRect` 只表示 Driver 报告的整数
+像素几何，不自动绑定某一次 Screenshot；XCUITest 与 UiAutomator2 的
 `mobile: viewportRect` 结果由 Driver 负责选择单位，客户端只做严格承载和
 数值校验。已明确 SDK 每次发起读取且不缓存返回值、通过根包统一 Execute Script
 链执行，以及 orientation、status bar、scale/density 不触发隐式转换；Driver
-内部基础事实的缓存和刷新时机仍由远端实现决定。已记录与
-Screenshot 的像素验证流程、错误/Delivery 边界和未来 DP-061 的实现输入。
+内部基础事实的缓存和刷新时机仍由远端实现决定。能否将 ViewportRect 用作某张
+Screenshot 的 crop rectangle 属于带环境、Context 和采集路径条件的兼容性事实。
+已记录验证流程、错误/Delivery 边界和未来 DP-061 的实现输入。
 
 排除运行时代码和自动坐标转换。
 

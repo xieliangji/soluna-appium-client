@@ -431,7 +431,7 @@ Element Screenshot 采用标准远端 Element Screenshot 语义，并提供内�
 
 ## 8. 坐标与视觉产物
 
-项目明确区分两类坐标空间：
+项目明确区分 WebDriver 几何、Driver 像素几何和具体图像产物：
 
 ```text
 WebDriver 几何
@@ -440,27 +440,33 @@ WebDriver 几何
     Element Rect
     W3C Actions
 
-图像几何
+Driver 像素几何
     PixelRect
-    Screenshot
-    Viewport
+    ViewportRect
+
+具体图像产物
+    Screenshot 自身的解码像素平面
     OCR / CV
 ```
 
-两类坐标不能通过相同 Go 类型混用。
+这些概念不能通过相同 Go 类型混用。`PixelRect` 只承载 Driver 报告的整数像素
+几何，不标识或自动绑定某一次 Screenshot 的解码像素平面。
 
 Driver 返回的 scale、status bar、orientation 等只作为坐标转换的辅助事实。没有完整且经过验证的转换模型前，SDK 不执行隐式缩放、偏移或方向修正。
 
-`ViewportRect` 属于截图像素空间，不替换 `WindowRect` 参与 Element 查找或 Actions。
+`ViewportRect` 属于 Driver 像素几何，不替换 `WindowRect` 参与 Element 查找或
+Actions，也不自动成为任一 Screenshot 的 crop rectangle。
 
 `DP-060` 已将该边界细化在 [`docs/coordinate-system.md`](coordinate-system.md)：
-`Rect`/`Point` 保持 WebDriver 几何语义，`PixelRect` 使用整数截图像素语义；
+`Rect`/`Point` 保持 WebDriver 几何语义，`PixelRect` 使用 Driver-reported integer
+pixel geometry 语义；
 XCUITest 和 UiAutomator2 的 `mobile: viewportRect` 结果按各自 Driver 的事实
 承载，不由客户端再次应用 scale、density、status bar 或 orientation 变换。
 `Session.ViewportRect` 由 DP-061 通过根包统一 Execute Script 链实现；SDK 每次
 发起读取且不缓存返回值，严格校验非负原点、正面积、整数表示和端点溢出。Driver
 内部可能缓存基础屏幕事实，刷新时机以远端实现为准。该结果不会进入现有 Native
-Find/Tap，也不为 Web Context 的 DOM 几何提供等价保证。
+Find/Tap，也不为 Web Context 的 DOM 几何或具体 Screenshot 像素平面提供等价
+保证；能否用于裁剪属于带环境、Context 和采集路径条件的兼容性事实。
 
 ## 9. 大型响应与二进制产物
 
@@ -674,7 +680,7 @@ internal/bidi       BiDi 协议实现
 | AD-022 | Accepted | SDK 只公开根包 `appium.Client`；平台包不定义 Client 或 Session wrapper | 调用方始终使用同一 Client/Session 对象模型 |
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
 | AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
-| AD-025 | Accepted | ViewportRect 使用独立的截图像素 `PixelRect`；Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver 几何与图像几何混用，并把跨 Driver 的像素验证留给显式兼容性流程 |
+| AD-025 | Accepted | ViewportRect 使用独立的 Driver 像素几何 `PixelRect`；该类型不绑定具体 Screenshot buffer，Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver、Driver pixel geometry 与具体图像平面混用，并把 Screenshot 裁剪关系留给显式兼容性验证 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 
