@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-070`（已完成；下一项需显式选择）
+> 当前计划项：`DP-071`（已完成；下一项需显式选择）
 > 最后更新：2026-08-31
 
 ## Agent 执行约束
@@ -30,7 +30,7 @@
 | 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Done | — |
 | 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Done | DP-060 |
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Done | — |
-| 11 | `DP-071` Element 显式等待 | `WAIT-002` | Queued | DP-070 |
+| 11 | `DP-071` Element 显式等待 | `WAIT-002` | Done | DP-070 |
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Queued | — |
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Queued | DP-080 |
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Queued | — |
@@ -175,6 +175,13 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 - 只重试明确为暂态的未找到结果，并保留最终错误。
 - 记录 Implicit Wait 与显式轮询叠加风险。
 - 排除 stale 自动恢复和 Element 自动重定位。
+
+已完成 `wait.Element` 与 `wait.Elements`：两者接受根包 Session 或 Element
+作为查找作用域，先立即调用公共 Find API，并按正的显式间隔继续轮询。
+只有 `CodeElementNotFound` 和合法空集合可继续；stale、Session 丢失、参数、
+响应格式及传输错误立即返回。收到过未找到错误的等待在超期时同时保留 context
+结果和最后一次未找到错误，Elements 仅有空集合时返回 context 结果；实现不修改
+隐式或命令超时，不自动重新定位或恢复 Element，并补充了 stub 与协议回归测试。
 
 ### DP-080 Pull Logs 设计
 

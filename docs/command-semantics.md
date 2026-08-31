@@ -154,6 +154,36 @@ Until 不为条件创建后台 goroutine，不设置 Session Timeout，也不推
 语义；长时间 Implicit Wait 与高频显式轮询叠加时，每轮条件调用仍可能等待远端
 隐式超时。
 
+## Element 显式等待（DP-071）
+
+`wait.Element` 和 `wait.Elements` 是建立在根包查找 API 上的客户端本地轮询：
+
+```text
+wait.Element(ctx, interval, finder, locator)
+wait.Elements(ctx, interval, finder, locator)
+```
+
+`finder` 可以是根包的 `*appium.Session` 或 `*appium.Element`；前者执行
+Session 级查找，后者执行元素后代查找。每一轮都会重新调用对应的公共
+`Find` 或 `FindElements`，因此请求、Observer 事件、隐式等待和根包错误语义
+都保持不变，wait 包不建立自己的 HTTP 通道。
+
+两种等待都会先立即执行一次。`Element` 在获得非 nil 元素时成功；
+`Elements` 只有在获得至少一个元素时成功，根包返回的空集合会继续轮询。
+Find 返回 nil 元素而没有错误，或 FindElements 返回包含 nil 元素的集合，均视为
+响应格式错误并立即结束。
+只有根包明确标记为 `CodeElementNotFound` 的错误会被压低为暂态结果并按
+`interval` 重试。stale、Session 丢失、参数、响应格式和传输错误均立即原样
+返回，不根据错误文本或 Delivery 推断其他可重试类别。
+
+调用方 context 是唯一的总期限来源，`interval` 必须为正数。若任一 helper 在
+期限结束前已经收到过未找到错误，返回结果同时保留 context 错误和最后一次
+未找到错误（可分别使用 `errors.Is` 与 `appium.IsErrorCode` 检查）；
+`Elements` 仅收到空集合时没有底层错误，期限结束返回 context 错误。等待不会
+修改 Implicit/Command Timeout，不会自动重新定位已返回的 Element，也不会恢复
+stale 引用。长时间 Implicit Wait 与高频显式轮询叠加时，每一轮 Find 仍可能先
+等待远端隐式超时。
+
 ## Runtime Discovery（DP-041 实现契约）
 
 `Session.Commands` 和 `Session.Extensions` 分别读取当前 Session 的 Appium

@@ -62,6 +62,28 @@ context 结束时，返回 `context.Canceled` 或 `context.DeadlineExceeded`；�
 使用 `errors.Is` 判断。nil context、nil 条件和非正轮询间隔属于本地参数错误，
 函数不会调用条件或发送远端请求。
 
+## Element 显式等待错误
+
+`wait.Element` 与 `wait.Elements` 不拥有独立的远端命令；每一轮查找产生的
+请求和 Observer 生命周期都由根包 `Find`/`FindElements` 负责。wait 只把
+`CodeElementNotFound`（以及 `FindElements` 的空集合结果）作为暂态结果，按
+调用方指定的间隔继续轮询。它不根据错误文本、HTTP 状态或 Delivery 自行扩大
+重试范围。
+
+stale、Session 丢失、参数、响应格式、传输和其他远端错误在第一次出现时
+立即原样交还调用方，保留根包 `*Error` 的错误码、Operation、Delivery 和
+Cause；客户端不会自动重新定位或恢复 stale Element。
+
+Find 的 nil 成功值或 FindElements 集合中的 nil 元素不满足公共结果契约，按
+`CodeResponseInvalid` 立即结束，不会被当作未找到结果重试。
+
+如果 `wait.Element` 或 `wait.Elements` 在 context 结束前至少收到一次
+`CodeElementNotFound`，返回错误会同时包含 context 结果与最后一次未找到错误。
+调用方可用 `errors.Is` 判断 `context.Canceled`/`context.DeadlineExceeded`，并用
+`appium.IsErrorCode`、`appium.DeliveryOf` 读取最后一次根包错误。若
+`wait.Elements` 的每一轮都只是合法空集合，则底层没有错误可保留，context
+结果单独返回。wait helper 不生成新的 Delivery 状态。
+
 nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
 `DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
 相应的取消/截止时间错误并保持 `DeliveryNotSent`；响应收到后解码期间结束时

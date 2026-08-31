@@ -545,6 +545,43 @@ func Until(
 goroutine 强制中断，也不执行远端命令、不改变 Implicit/Command Timeout，
 不对条件错误做自动重试或 Session 恢复。
 
+DP-071 在此基础上提供两个查找专用 helper：
+
+```go
+func Element(
+    ctx context.Context,
+    interval time.Duration,
+    finder interface {
+        Find(context.Context, appium.Locator) (*appium.Element, error)
+    },
+    locator appium.Locator,
+) (*appium.Element, error)
+
+func Elements(
+    ctx context.Context,
+    interval time.Duration,
+    finder interface {
+        FindElements(context.Context, appium.Locator) ([]*appium.Element, error)
+    },
+    locator appium.Locator,
+) ([]*appium.Element, error)
+```
+
+`*appium.Session` 与 `*appium.Element` 都可以作为 `finder`，分别保留
+Session 级和 Element 级查找作用域。两种 helper 都先立即调用一次公共 Find
+API；`Element` 在得到非 nil 引用时成功，`Elements` 在得到非空集合时成功。
+Find 的 nil 成功值或 FindElements 集合中的 nil 元素属于响应格式错误。
+空集合和 `CodeElementNotFound` 是唯一允许继续轮询的未找到结果；其他错误
+立即原样返回。helper 不直接访问传输层、不增加新的命令、不修改 Session
+Timeout，也不保存 Locator 或恢复 stale 引用。
+
+当 `Element` 已记录暂态未找到错误而 context 在下一轮前结束时，helper 保留
+context 结果并通过多错误链保留最后一次查找错误。这样既能用
+`errors.Is(err, context.DeadlineExceeded)` 判断等待期限，也能用根包的
+`appium.IsErrorCode(err, appium.CodeElementNotFound)` 读取最后一次诊断事实。
+`Elements` 如果所有轮询都只是空集合，则没有可保留的根包错误，直接返回
+context 结果。
+
 显式等待应遵循：
 
 - 总截止时间由调用方 context 决定；
