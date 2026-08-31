@@ -526,6 +526,25 @@ Streaming Logs、系统监控和网络监控通过 WebDriver BiDi 持续交付�
 
 `wait` 包建立在根包公共 API 上，不进入传输层，也不修改 Session 配置。
 
+DP-070 的最小公共契约为：
+
+```go
+func Until(
+    ctx context.Context,
+    interval time.Duration,
+    condition func(context.Context) (done bool, err error),
+) error
+```
+
+`Until` 先立即调用一次条件。条件返回 `false, nil` 表示继续，返回
+`true, nil` 表示成功，返回非 nil error 表示失败并立即结束；条件错误原样
+交还调用方。条件返回时若 context 已结束，context 结果优先于成功结果。
+`interval` 必须为正数，并用于控制未完成检查之间的等待。
+调用方 context 是唯一的总期限来源；等待间隔期间会响应取消，条件函数也会
+收到同一个 context，并负责让自身执行遵守该 context。`Until` 不为条件另建
+goroutine 强制中断，也不执行远端命令、不改变 Implicit/Command Timeout，
+不对条件错误做自动重试或 Session 恢复。
+
 显式等待应遵循：
 
 - 总截止时间由调用方 context 决定；

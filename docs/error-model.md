@@ -53,6 +53,15 @@ Element Screenshot 收到远端 `stale element reference`（映射为
 `CodeElementStale`）或其他 W3C 命令错误时，沿用统一远端错误映射和 Delivery
 语义；客户端不会自动重新定位或重试。
 
+## 通用显式等待错误
+
+`wait.Until` 不拥有独立的远端命令，因此不会生成或修改 Delivery 状态。条件
+返回的 error 原样交还调用方，包含根包 `*Error` 时保留其错误码、Operation、
+Delivery 与 Cause。Until 在轮询间隔、下一轮开始前或条件返回成功后观察到调用方
+context 结束时，返回 `context.Canceled` 或 `context.DeadlineExceeded`；调用方可以
+使用 `errors.Is` 判断。nil context、nil 条件和非正轮询间隔属于本地参数错误，
+函数不会调用条件或发送远端请求。
+
 nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
 `DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
 相应的取消/截止时间错误并保持 `DeliveryNotSent`；响应收到后解码期间结束时

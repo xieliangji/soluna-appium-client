@@ -132,6 +132,28 @@ Session ID 和 Element ID 按 Endpoint 规则作为独立路径段转义。请�
 Element Screenshot 只报告 Driver 的标准截图结果，不自动滚动元素、恢复可见性
 或处理 stale 引用，也不承诺与完整截图按 Element Rect 本地裁剪等价。
 
+## 通用显式等待（DP-070）
+
+`wait.Until` 是客户端本地轮询辅助，不发送或修改任何 Appium 命令：
+
+```text
+wait.Until(ctx, interval, condition)
+```
+
+条件会先立即执行一次，并按以下结果决定流程；如果条件返回时 context
+已经结束，即使返回 `true, nil` 也按 context 结束处理：
+
+- `false, nil`：等待 `interval` 后继续下一轮；
+- `true, nil`：成功返回 `nil`；
+- 非 nil error：立即返回该错误，不自动重试或包装。
+
+`ctx` 必须非 nil，`interval` 必须为正数，`condition` 必须非 nil。轮询间隔
+受调用方 context 约束，condition 收到同一个 context 并负责在自身执行中遵守；
+context 在下一轮开始前或间隔等待期间结束时，返回对应的 context 错误。
+Until 不为条件创建后台 goroutine，不设置 Session Timeout，也不推断条件的业务
+语义；长时间 Implicit Wait 与高频显式轮询叠加时，每轮条件调用仍可能等待远端
+隐式超时。
+
 ## Runtime Discovery（DP-041 实现契约）
 
 `Session.Commands` 和 `Session.Extensions` 分别读取当前 Session 的 Appium

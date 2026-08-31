@@ -181,7 +181,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | BIDI-001 | 通用 WebDriver BiDi 连接与命令关联 | Session stream | Architecture | WebSocket / BiDi | Appium/Driver 必须返回可用 Endpoint | None | 先设计 `internal/bidi` |
 | BIDI-002 | 有界订阅、取消、背压和关闭 | Session stream | Architecture | BiDi Event Stream | 不自动重连 | None | 增加协议测试基础设施 |
 | LOG-003 | 通用 Streaming Logs | Session stream | Architecture | WebDriver BiDi | 依赖 BIDI-001/002 | None | 与平台日志事件分层 |
-| WAIT-001 | `wait.Until` | wait helper | Accepted | Client-side polling | 总期限由 context 控制 | None | `wait/wait.go` 当前为空 |
+| WAIT-001 | `wait.Until` | wait helper | Implemented | Client-side polling | 总期限由 context 控制；轮询间隔为正且显式提供；不修改 Session Timeout | Unit | `wait/wait.go`, `wait/wait_test.go`, `docs/command-semantics.md` |
 | WAIT-002 | `wait.Element` / `wait.Elements` | wait helper | Accepted | 重复调用公共 Find | 只重试声明为暂态的结果 | None | `wait/element.go` 当前为空 |
 
 ## 6. XCUITest 平台能力

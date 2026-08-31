@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-061`（已完成；下一项需显式选择）
+> 当前计划项：`DP-070`（已完成；下一项需显式选择）
 > 最后更新：2026-08-31
 
 ## Agent 执行约束
@@ -29,7 +29,7 @@
 | 7 | `DP-051` Element Screenshot | `ELM-006..007` | Done | DP-050 |
 | 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Done | — |
 | 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Done | DP-060 |
-| 10 | `DP-070` 通用显式等待 | `WAIT-001` | Queued | — |
+| 10 | `DP-070` 通用显式等待 | `WAIT-001` | Done | — |
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Queued | DP-070 |
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Queued | — |
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Queued | DP-080 |
@@ -163,6 +163,11 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 - context 控制总期限；轮询间隔明确。
 - 条件可表达继续、成功和失败。
 - 排除 Session Timeout 修改、业务条件和 Session 恢复。
+
+已完成 `wait.Until`：条件先立即执行，`false, nil` 按正轮询间隔继续，
+`true, nil` 成功，非 nil error 立即原样返回；context 终止间隔等待和后续轮询。
+实现不发送远端命令、不修改 Session 超时、不自动重试或恢复 Session，并补充
+了本地单元测试与显式等待语义文档。
 
 ### DP-071 Element 显式等待
 
