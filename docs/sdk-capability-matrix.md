@@ -182,7 +182,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | BIDI-002 | 有界订阅、取消、背压和关闭 | Session stream | Architecture | BiDi Event Stream | 不自动重连 | None | 增加协议测试基础设施 |
 | LOG-003 | 通用 Streaming Logs | Session stream | Architecture | WebDriver BiDi | 依赖 BIDI-001/002 | None | 与平台日志事件分层 |
 | WAIT-001 | `wait.Until` | wait helper | Implemented | Client-side polling | 总期限由 context 控制；轮询间隔为正且显式提供；不修改 Session Timeout | Unit | `wait/wait.go`, `wait/wait_test.go`, `docs/command-semantics.md` |
-| WAIT-002 | `wait.Element` / `wait.Elements` | wait helper | Implemented | 重复调用 Session 或 Element 的公共 Find API | context 控制总期限；仅重试 `CodeElementNotFound` 与空集合；不修改 Session Timeout，不自动恢复 stale | Protocol | `wait/element.go`, `wait/element_test.go`, `wait/element_protocol_test.go`, `docs/command-semantics.md`, `docs/error-model.md` |
+| WAIT-002 | `wait.Element` / `wait.Elements` | wait helper | Implemented | 重复调用 Session 或 Element 的公共 Find API | context 控制总期限；仅重试 `CodeElementNotFound` 与空集合；Find 内 context 错误保留此前诊断；本地 finder malformed 结果不生成远端 Delivery；不修改 Session Timeout，不自动恢复 stale | Protocol | `wait/element.go`, `wait/element_test.go`, `wait/element_protocol_test.go`, `errors.go`, `docs/architecture.md`, `docs/command-semantics.md`, `docs/error-model.md` |
 
 ## 6. XCUITest 平台能力
 

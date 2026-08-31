@@ -122,6 +122,116 @@ func TestElementDeadlineKeepsContextAndLastNotFound(t *testing.T) {
 	}
 }
 
+func TestElementPreservesNotFoundWhenFindEndsWithContext(t *testing.T) {
+	notFound := &appium.Error{
+		Code:      appium.CodeElementNotFound,
+		Operation: "find_element",
+		Message:   "not present",
+		Delivery:  appium.DeliveryAcknowledged,
+	}
+	finder := &contextEndingElementFinder{
+		notFound: notFound,
+		started:  make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := wait.Element(
+			ctx,
+			time.Millisecond,
+			finder,
+			appium.ID("login"),
+		)
+		result <- err
+	}()
+
+	select {
+	case <-finder.started:
+	case <-time.After(time.Second):
+		t.Fatal("second Find call did not start")
+	}
+	cancel()
+
+	var err error
+	select {
+	case err = <-result:
+	case <-time.After(time.Second):
+		t.Fatal("Element() did not return after Find context cancellation")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Element() error = %v, want context canceled", err)
+	}
+	if !appium.IsErrorCode(err, appium.CodeCanceled) {
+		t.Fatalf("Element() error = %v, want structured canceled error", err)
+	}
+	if !errors.Is(err, notFound) {
+		t.Fatalf("Element() error = %v, want last not-found diagnostic", err)
+	}
+	if !appium.IsErrorCode(err, appium.CodeElementNotFound) {
+		t.Fatalf("Element() error = %v, want not-found diagnostic", err)
+	}
+	if got := appium.DeliveryOf(err); got != appium.DeliveryUnknown {
+		t.Fatalf("Element() delivery = %q, want terminal context delivery %q", got, appium.DeliveryUnknown)
+	}
+}
+
+func TestElementsPreservesNotFoundWhenFindEndsWithContext(t *testing.T) {
+	notFound := &appium.Error{
+		Code:      appium.CodeElementNotFound,
+		Operation: "find_elements",
+		Message:   "not present",
+		Delivery:  appium.DeliveryAcknowledged,
+	}
+	finder := &contextEndingElementsFinder{
+		notFound: notFound,
+		started:  make(chan struct{}),
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	result := make(chan error, 1)
+	go func() {
+		_, err := wait.Elements(
+			ctx,
+			time.Millisecond,
+			finder,
+			appium.ID("item"),
+		)
+		result <- err
+	}()
+
+	select {
+	case <-finder.started:
+	case <-time.After(time.Second):
+		t.Fatal("second FindElements call did not start")
+	}
+	cancel()
+
+	var err error
+	select {
+	case err = <-result:
+	case <-time.After(time.Second):
+		t.Fatal("Elements() did not return after FindElements context cancellation")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Elements() error = %v, want context canceled", err)
+	}
+	if !appium.IsErrorCode(err, appium.CodeCanceled) {
+		t.Fatalf("Elements() error = %v, want structured canceled error", err)
+	}
+	if !errors.Is(err, notFound) {
+		t.Fatalf("Elements() error = %v, want last not-found diagnostic", err)
+	}
+	if !appium.IsErrorCode(err, appium.CodeElementNotFound) {
+		t.Fatalf("Elements() error = %v, want not-found diagnostic", err)
+	}
+	if got := appium.DeliveryOf(err); got != appium.DeliveryUnknown {
+		t.Fatalf("Elements() delivery = %q, want terminal context delivery %q", got, appium.DeliveryUnknown)
+	}
+}
+
 func TestElementsRetriesEmptyAndNotFound(t *testing.T) {
 	notFound := &appium.Error{
 		Code:      appium.CodeElementNotFound,
@@ -202,11 +312,45 @@ func TestElementsRejectsNilElementInSuccessfulCollection(t *testing.T) {
 	if elements != nil {
 		t.Fatalf("Elements() returned malformed elements: %v", elements)
 	}
-	if !appium.IsErrorCode(err, appium.CodeResponseInvalid) {
-		t.Fatalf("Elements() error = %v, want response-invalid", err)
+	if err == nil {
+		t.Fatal("Elements() error = nil, want finder contract error")
+	}
+	if appium.IsErrorCode(err, appium.CodeResponseInvalid) {
+		t.Fatalf("Elements() fabricated remote response error: %v", err)
+	}
+	if got := appium.DeliveryOf(err); got != appium.DeliveryUnknown {
+		t.Fatalf("Elements() delivery = %q, want unknown for local finder error", got)
 	}
 	if got := finder.elementsCallCount(); got != 1 {
 		t.Fatalf("FindElements calls = %d, want 1", got)
+	}
+}
+
+func TestElementRejectsNilSuccessfulResultWithoutRemoteFacts(t *testing.T) {
+	finder := &stubFinder{
+		elementResults: []elementResult{{element: nil}},
+	}
+
+	element, err := wait.Element(
+		context.Background(),
+		time.Millisecond,
+		finder,
+		appium.ID("item"),
+	)
+	if element != nil {
+		t.Fatalf("Element() returned malformed element: %v", element)
+	}
+	if err == nil {
+		t.Fatal("Element() error = nil, want finder contract error")
+	}
+	if appium.IsErrorCode(err, appium.CodeResponseInvalid) {
+		t.Fatalf("Element() fabricated remote response error: %v", err)
+	}
+	if got := appium.DeliveryOf(err); got != appium.DeliveryUnknown {
+		t.Fatalf("Element() delivery = %q, want unknown for local finder error", got)
+	}
+	if got := finder.elementCallCount(); got != 1 {
+		t.Fatalf("Find calls = %d, want 1", got)
 	}
 }
 
@@ -282,6 +426,23 @@ func TestElementRejectsNilFinderWithoutCallingRemoteAPI(t *testing.T) {
 	}
 }
 
+func TestElementRejectsTypedNilFinderWithoutPanic(t *testing.T) {
+	var finder *stubFinder
+
+	element, err := wait.Element(
+		context.Background(),
+		time.Millisecond,
+		finder,
+		appium.ID("login"),
+	)
+	if element != nil {
+		t.Fatalf("Element() returned element for typed nil finder: %v", element)
+	}
+	if !appium.IsErrorCode(err, appium.CodeInvalidArgument) {
+		t.Fatalf("Element() error = %v, want invalid argument", err)
+	}
+}
+
 type elementResult struct {
 	element *appium.Element
 	err     error
@@ -290,6 +451,72 @@ type elementResult struct {
 type elementsResult struct {
 	elements []*appium.Element
 	err      error
+}
+
+type contextEndingElementFinder struct {
+	mu       sync.Mutex
+	calls    int
+	notFound error
+	once     sync.Once
+	started  chan struct{}
+}
+
+func (f *contextEndingElementFinder) Find(
+	ctx context.Context,
+	_ appium.Locator,
+) (*appium.Element, error) {
+	f.mu.Lock()
+	f.calls++
+	call := f.calls
+	f.mu.Unlock()
+
+	if call == 1 {
+		return nil, f.notFound
+	}
+	f.once.Do(func() {
+		close(f.started)
+	})
+	<-ctx.Done()
+	return nil, &appium.Error{
+		Code:      appium.CodeCanceled,
+		Operation: "find_element",
+		Message:   "operation canceled",
+		Delivery:  appium.DeliveryUnknown,
+		Cause:     ctx.Err(),
+	}
+}
+
+type contextEndingElementsFinder struct {
+	mu       sync.Mutex
+	calls    int
+	notFound error
+	once     sync.Once
+	started  chan struct{}
+}
+
+func (f *contextEndingElementsFinder) FindElements(
+	ctx context.Context,
+	_ appium.Locator,
+) ([]*appium.Element, error) {
+	f.mu.Lock()
+	f.calls++
+	call := f.calls
+	f.mu.Unlock()
+
+	if call == 1 {
+		return nil, f.notFound
+	}
+	f.once.Do(func() {
+		close(f.started)
+	})
+	<-ctx.Done()
+	return nil, &appium.Error{
+		Code:      appium.CodeCanceled,
+		Operation: "find_elements",
+		Message:   "operation canceled",
+		Delivery:  appium.DeliveryUnknown,
+		Cause:     ctx.Err(),
+	}
 }
 
 type stubFinder struct {

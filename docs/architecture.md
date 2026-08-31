@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-08-30
+> 最后更新：2026-08-31
 
 ## 1. 文档职责
 
@@ -75,7 +75,7 @@ SDK 只定义一个公共 Client 类型：`appium.Client`。
 
 连接多个 Appium Endpoint 时，调用方可以创建多个 `appium.Client` 实例；这不意味着存在 XCUITest Client、UiAutomator2 Client 或 BiDi Client 等平行公共类型。
 
-`xcuitest`、`uiautomator2` 和 `wait` 不拥有独立 Session，也不包装根包 Session。它们接收根包创建的 `*appium.Session` 或 `*appium.Element`，并复用其所属 Client、远端 Session 身份和统一执行语义。
+`xcuitest`、`uiautomator2` 和 `wait` 不拥有独立 Session，也不包装根包 Session。它们接收根包创建的 `*appium.Session` 或 `*appium.Element`，并复用其所属 Client、远端 Session 身份和统一执行语义。`wait` 的 Element helper 还接受满足相同查找方法签名的本地 finder；本地 finder 不获得根包的远端 Delivery 事实，返回 malformed 结果时按本地契约错误处理。
 
 ## 5. 包依赖与运行拓扑
 

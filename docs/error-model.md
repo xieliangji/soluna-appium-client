@@ -74,15 +74,21 @@ stale、Session 丢失、参数、响应格式、传输和其他远端错误在�
 立即原样交还调用方，保留根包 `*Error` 的错误码、Operation、Delivery 和
 Cause；客户端不会自动重新定位或恢复 stale Element。
 
-Find 的 nil 成功值或 FindElements 集合中的 nil 元素不满足公共结果契约，按
-`CodeResponseInvalid` 立即结束，不会被当作未找到结果重试。
+根包 Find API 从远端响应解码出不符合公共结果契约的 nil 成功值或 nil 集合
+元素时，继续按根包命令语义返回 `CodeResponseInvalid` 与
+`DeliveryAcknowledged`。wait 的 finder 参数采用结构化方法接口，因此任意
+本地实现也可能返回 malformed 成功值；这属于本地 finder 契约错误，wait 立即
+返回普通本地 error，不生成 `CodeResponseInvalid`，也不伪造任何 Delivery 状态
+（`appium.DeliveryOf` 对此返回 `DeliveryUnknown`）。两者都不会被当作未找到
+结果重试。
 
 如果 `wait.Element` 或 `wait.Elements` 在 context 结束前至少收到一次
-`CodeElementNotFound`，返回错误会同时包含 context 结果与最后一次未找到错误。
-调用方可用 `errors.Is` 判断 `context.Canceled`/`context.DeadlineExceeded`，并用
-`appium.IsErrorCode`、`appium.DeliveryOf` 读取最后一次根包错误。若
-`wait.Elements` 的每一轮都只是合法空集合，则底层没有错误可保留，context
-结果单独返回。wait helper 不生成新的 Delivery 状态。
+`CodeElementNotFound`，且间隔等待或最终 Find 调用因 context 结束，返回错误会
+同时包含 context 结果与最后一次未找到错误。调用方可用 `errors.Is` 判断
+`context.Canceled`/`context.DeadlineExceeded`；`appium.IsErrorCode` 遍历多错误树
+中的所有结构化错误码，`appium.DeliveryOf` 报告排在主错误位置的 context 命令
+Delivery。若 `wait.Elements` 的每一轮都只是合法空集合，则底层没有错误可保留，
+context 结果单独返回。wait helper 不生成新的 Delivery 状态。
 
 nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery 为
 `DeliveryNotSent`，不会发送远端请求。调用方 context 在请求发送前结束时返回
@@ -122,6 +128,11 @@ string 与 `required` boolean 的对象；缺失字段、显式 `null` 或其他
 目录查询不会因为 `Supports` 结果而改变其他命令的错误或 Delivery 语义。
 
 ## Delivery
+
+`IsErrorCode` 会检查普通 `Unwrap() error` 链和 `errors.Join` 的
+`Unwrap() []error` 分支；`DeliveryOf` 在多错误树中返回第一个结构化
+`*Error` 的 Delivery，调用方应先确定该主错误，再用 `IsErrorCode` 查询诊断
+分支。
 
 - `DeliveryNotSent`：调用方 context 已结束、参数无效或请求构造失败，
   客户端确认命令未发送；

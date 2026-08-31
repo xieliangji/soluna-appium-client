@@ -177,10 +177,12 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 - 排除 stale 自动恢复和 Element 自动重定位。
 
 已完成 `wait.Element` 与 `wait.Elements`：两者接受根包 Session 或 Element
-作为查找作用域，先立即调用公共 Find API，并按正的显式间隔继续轮询。
+作为查找作用域（并允许满足相同签名的本地 finder），先立即调用公共 Find API，
+并按正的显式间隔继续轮询。
 只有 `CodeElementNotFound` 和合法空集合可继续；stale、Session 丢失、参数、
-响应格式及传输错误立即返回。收到过未找到错误的等待在超期时同时保留 context
-结果和最后一次未找到错误，Elements 仅有空集合时返回 context 结果；实现不修改
+响应格式及传输错误立即返回。根包 context 错误即使发生在 Find 调用内部，也会
+与此前未找到诊断一并保留；本地 finder malformed 结果返回普通本地契约错误，
+不伪造远端 Code/Delivery。Elements 仅有空集合时返回 context 结果；实现不修改
 隐式或命令超时，不自动重新定位或恢复 Element，并补充了 stub 与协议回归测试。
 
 ### DP-080 Pull Logs 设计

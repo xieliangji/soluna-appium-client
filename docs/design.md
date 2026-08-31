@@ -568,19 +568,23 @@ func Elements(
 ```
 
 `*appium.Session` 与 `*appium.Element` 都可以作为 `finder`，分别保留
-Session 级和 Element 级查找作用域。两种 helper 都先立即调用一次公共 Find
-API；`Element` 在得到非 nil 引用时成功，`Elements` 在得到非空集合时成功。
-Find 的 nil 成功值或 FindElements 集合中的 nil 元素属于响应格式错误。
+Session 级和 Element 级查找作用域；满足相同方法签名的本地实现也可以作为
+结构化 finder。两种 helper 都先立即调用一次公共 Find API；`Element` 在得到
+非 nil 引用时成功，`Elements` 在得到非空集合时成功。根包 Find API 返回的
+非法响应继续使用根包的 `CodeResponseInvalid`/Delivery 语义；本地 finder 返回
+nil 成功值或包含 nil 元素的集合则是 finder 契约错误，不伪造远端错误码或
+Delivery 状态。
 空集合和 `CodeElementNotFound` 是唯一允许继续轮询的未找到结果；其他错误
 立即原样返回。helper 不直接访问传输层、不增加新的命令、不修改 Session
 Timeout，也不保存 Locator 或恢复 stale 引用。
 
-当 `Element` 已记录暂态未找到错误而 context 在下一轮前结束时，helper 保留
-context 结果并通过多错误链保留最后一次查找错误。这样既能用
-`errors.Is(err, context.DeadlineExceeded)` 判断等待期限，也能用根包的
-`appium.IsErrorCode(err, appium.CodeElementNotFound)` 读取最后一次诊断事实。
-`Elements` 如果所有轮询都只是空集合，则没有可保留的根包错误，直接返回
-context 结果。
+当 `Element` 或 `Elements` 已记录暂态未找到错误，而 context 在下一轮前或
+最后一次 Find 调用内部结束时，helper 保留 context 结果并通过多错误链保留
+最后一次查找错误。context 命令错误排在主错误位置；`errors.Is` 可判断
+`context.Canceled`/`context.DeadlineExceeded`，`appium.IsErrorCode` 会遍历
+错误树读取 context 与未找到两个错误码，`appium.DeliveryOf` 报告主错误的
+Delivery。若 `Elements` 的所有轮询都只是空集合，则没有可保留的根包错误，
+直接返回 context 结果。
 
 显式等待应遵循：
 

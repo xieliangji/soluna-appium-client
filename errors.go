@@ -78,18 +78,41 @@ func (e *Error) Unwrap() error {
 	return e.Cause
 }
 
-// IsErrorCode 判断错误链中是否包含指定错误码。
+// IsErrorCode 判断错误链或 errors.Join 错误树中是否包含指定错误码。
 func IsErrorCode(err error, code ErrorCode) bool {
+	if err == nil {
+		return false
+	}
+
 	var target *Error
-	return errors.As(err, &target) && target.Code == code
+	if errors.As(err, &target) && target != nil && target.Code == code {
+		return true
+	}
+
+	// errors.As 返回错误树中第一个匹配的 *Error；当它的 Code 不匹配时，
+	// 仍需显式遍历其他分支，才能让 errors.Join 同时暴露主错误和诊断错误。
+	switch unwrapped := err.(type) {
+	case interface{ Unwrap() []error }:
+		for _, child := range unwrapped.Unwrap() {
+			if IsErrorCode(child, code) {
+				return true
+			}
+		}
+	case interface{ Unwrap() error }:
+		return IsErrorCode(unwrapped.Unwrap(), code)
+	}
+
+	return false
 }
 
 // DeliveryOf 返回错误中记录的命令投递状态。
 //
+// 对包含多个客户端 Error 的错误树，返回 errors.As 遍历到的第一个
+// Error 的状态；调用方可使用 IsErrorCode 判断其他分支中的错误码。
 // 如果 err 不是客户端定义的 Error，则返回 DeliveryUnknown。
 func DeliveryOf(err error) DeliveryState {
 	var target *Error
-	if !errors.As(err, &target) {
+	if !errors.As(err, &target) || target == nil {
 		return DeliveryUnknown
 	}
 	return target.Delivery
