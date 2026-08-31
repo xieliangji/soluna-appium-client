@@ -5,6 +5,7 @@ const (
 	defaultMaxPageSourceResponseBytes int64 = 96 << 20  // Page Source 响应默认上限：96 MiB
 	defaultMaxScreenshotResponseBytes int64 = 64 << 20  // Session/Element Screenshot 响应默认上限：64 MiB
 	defaultMaxRecordingResponseBytes  int64 = 256 << 20 // 录屏响应默认上限：256 MiB
+	defaultMaxLogResponseBytes        int64 = 32 << 20  // Pull Logs 响应默认上限：32 MiB
 	defaultMaxRemoteErrorBytes        int64 = 64 << 10  // 远端错误数据默认上限：64 KiB
 )
 
@@ -26,6 +27,9 @@ type Limits struct {
 	// MaxRecordingResponseBytes 表示停止录屏时允许读取的最大响应大小。
 	MaxRecordingResponseBytes int64
 
+	// MaxLogResponseBytes 表示 Session Pull Logs 命令允许读取的最大响应大小。
+	MaxLogResponseBytes int64
+
 	// MaxRemoteErrorBytes 表示公开 Error 中允许保留的最大远端错误数据大小。
 	MaxRemoteErrorBytes int64
 }
@@ -37,6 +41,7 @@ func DefaultLimits() Limits {
 		MaxPageSourceResponseBytes: defaultMaxPageSourceResponseBytes,
 		MaxScreenshotResponseBytes: defaultMaxScreenshotResponseBytes,
 		MaxRecordingResponseBytes:  defaultMaxRecordingResponseBytes,
+		MaxLogResponseBytes:        defaultMaxLogResponseBytes,
 		MaxRemoteErrorBytes:        defaultMaxRemoteErrorBytes,
 	}
 }

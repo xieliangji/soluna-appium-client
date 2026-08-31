@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httptrace"
 	"sync/atomic"
@@ -199,8 +200,15 @@ func (t *Transport) Execute(
 	result.ResponseReceived = true
 	result.StatusCode = response.StatusCode
 
+	// 比配置上限多读一个字节即可识别超限响应，无需保留完整的超限 Body。
+	// 调用方配置 int64 最大正值时不能让加一操作溢出。
+	readLimit := responseLimit
+	if responseLimit < math.MaxInt64 {
+		readLimit++
+	}
+
 	data, err := io.ReadAll(
-		io.LimitReader(response.Body, responseLimit+1),
+		io.LimitReader(response.Body, readLimit),
 	)
 	result.ResponseBytes = int64(len(data))
 

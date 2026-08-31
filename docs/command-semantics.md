@@ -63,10 +63,10 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
-## Session Pull Logs（DP-080 设计契约，待 DP-081 实现）
+## Session Pull Logs（DP-081 已实现）
 
-Pull Logs 只提供一次性的 Session 级批量读取。DP-081 将通过根包统一 HTTP
-执行链实现以下 Appium 3 路由；`/se/` 是标准路由的一部分，不使用历史或
+Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下
+Appium 3 路由；`/se/` 是标准路由的一部分，不使用历史或
 Driver 专用的 `/log` fallback：
 
 | API | HTTP | 路径 | 请求体 | 成功值 |

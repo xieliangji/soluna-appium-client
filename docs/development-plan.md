@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-080`（已完成；下一项需显式选择）
+> 当前计划项：`DP-081`（已完成；下一项需显式选择）
 > 最后更新：2026-08-31
 
 ## Agent 执行约束
@@ -32,7 +32,7 @@
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Done | — |
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Done | DP-070 |
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Done | — |
-| 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Queued | DP-080 |
+| 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Done | DP-080 |
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Queued | — |
 | 15 | `DP-091` Context API 实现 | `CTX-001` | Queued | DP-090 |
 | 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Queued | — |
@@ -202,7 +202,7 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 `LogType` 包括空字符串也原样透传，可用集合是可能随 Driver、Capability、当前
 Context 和其他 Session 状态变化的动态快照；`LogEntry` 严格要求 Unix epoch 毫秒
 `int64`、`level` 和 `message`，未知字段递归保存在独立 `Extra` 中并保持 Entry 顺序。
-DP-081 将增加独立的
+DP-081 已增加独立的
 `MaxLogResponseBytes`（默认 32 MiB），超限或任一条目格式错误都不返回部分结果。
 设计不假设 Driver 读取会清空或保留缓存，不做本地缓存、游标、轮询、合并、去重、
 自动重试或 Runtime Discovery 门禁；结构化集合不增加 `Writer`/JSONL 交付形式。
@@ -214,6 +214,13 @@ DP-081 将增加独立的
 - 增加 `MaxLogResponseBytes`。
 - 严格解码集合和条目，不假设读取会清空缓存。
 - 排除自动轮询、合并、去重和持续订阅。
+
+已完成根包 Pull Logs 实现和协议回归测试：通过统一 HTTP 执行链发送精确的
+`/se/log/types` 与 `/se/log` 请求，完整保留开放 Log Type、Entry 顺序、未知字段
+及 `json.Number` 数字值，并执行标准字段、时间戳、UTF-8/surrogate 和整体成功校验。
+`MaxLogResponseBytes` 使用 32 MiB 默认值并在完整 HTTP 响应边界生效；错误和
+Delivery 继续沿用统一命令语义。实现不缓存、不轮询、不合并、不去重或重试，真实
+Driver 消费语义和兼容性仍未验证。
 
 ## 第三阶段：Context 与通用设备交互
 

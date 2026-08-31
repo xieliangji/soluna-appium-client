@@ -505,7 +505,7 @@ Observer 日志，也不是持续事件流。所有请求都进入根包统一 H
 
 #### 10.1.1 公共类型和入口
 
-DP-081 实现以下根包类型和 Session 方法：
+DP-081 已实现以下根包类型和 Session 方法：
 
 ```go
 type LogType string
@@ -582,8 +582,8 @@ Session ID 按统一 Endpoint 规则作为独立路径段转义。GET 不带 bod
 方法调用只发起一次对应 HTTP 请求，不隐式调用 `LogTypes`、Discovery、`Healthy`
 或其他命令。
 
-Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别。DP-081 将为其增加
-默认值 `32 << 20`（32 MiB）；字段为零时采用该默认值，负数配置无效。该上限
+Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别，默认值为
+`32 << 20`（32 MiB）；字段为零时采用该默认值，负数配置无效。该上限
 按单次调用应用于完整 HTTP 响应体（包括 envelope），在传输读取边界执行；响应
 超过上限时整体返回 `CodeResponseTooLarge`/`DeliveryAcknowledged`，不截断并且
 不返回部分 Entry。`LogTypes` 和 `Logs` 都使用这一上限；它是每次读取的上限，
@@ -632,9 +632,9 @@ Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别。DP-081 将
 若未来确有低峰值内存或逐条背压需求，应另行设计带明确交付格式和进度/错误
 语义的迭代器或流；不得把它偷偷扩展为本能力的 Writer 或 Streaming Logs。
 
-#### 10.1.5 DP-081 实现和验证输入
+#### 10.1.5 DP-081 实现和验证记录
 
-DP-081 需要在根包 `logs.go` 中复用统一命令链，覆盖：
+DP-081 已在根包 `logs.go` 中复用统一命令链，覆盖：
 
 - 精确的 `/se/log/types` 与 `/se/log` 方法、路径、请求体和 Content-Type；
 - 开放 Log Type（包括空字符串透传）、远端对未知类型或空字符串的实际结果和每次只发一个请求；

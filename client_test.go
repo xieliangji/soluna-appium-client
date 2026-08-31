@@ -239,6 +239,14 @@ func TestNewClientRejectsNegativeConfiguration(t *testing.T) {
 			},
 		},
 		{
+			name: "log response limit",
+			options: appium.ClientOptions{
+				Limits: appium.Limits{
+					MaxLogResponseBytes: -1,
+				},
+			},
+		},
+		{
 			name: "remote error limit",
 			options: appium.ClientOptions{
 				Limits: appium.Limits{

@@ -114,6 +114,9 @@ func normalizeLimits(limits Limits) (Limits, error) {
 	if limits.MaxRecordingResponseBytes < 0 {
 		return Limits{}, invalidClientConfig("录屏响应大小上限不能为负数")
 	}
+	if limits.MaxLogResponseBytes < 0 {
+		return Limits{}, invalidClientConfig("Pull Logs 响应大小上限不能为负数")
+	}
 	if limits.MaxRemoteErrorBytes < 0 {
 		return Limits{}, invalidClientConfig("远端错误数据大小上限不能为负数")
 	}
@@ -131,6 +134,9 @@ func normalizeLimits(limits Limits) (Limits, error) {
 	}
 	if limits.MaxRecordingResponseBytes == 0 {
 		limits.MaxRecordingResponseBytes = defaults.MaxRecordingResponseBytes
+	}
+	if limits.MaxLogResponseBytes == 0 {
+		limits.MaxLogResponseBytes = defaults.MaxLogResponseBytes
 	}
 	if limits.MaxRemoteErrorBytes == 0 {
 		limits.MaxRemoteErrorBytes = defaults.MaxRemoteErrorBytes

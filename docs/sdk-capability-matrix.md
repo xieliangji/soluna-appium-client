@@ -176,8 +176,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| LOG-001 | `Session.LogTypes` 查询 Log Types | Session method | Accepted | Appium 3 `/session/{id}/se/log/types` | 每次远端读取的动态快照；集合可能受 Driver、Capability、当前 Context 和其他 Session 状态影响；开放字符串（包括空字符串），不做本地枚举或规范化 | None | DP-080 已固定开放 `LogType` 透传、顺序/空集合、空字符串和严格响应边界；DP-081 实现 `logs.go`；命令契约见 `docs/command-semantics.md` |
-| LOG-002 | `Session.Logs` 按类型 Pull Logs | Session method | Accepted | Appium 3 `/session/{id}/se/log` | 单次有界结构化读取；`LogType`（包括空字符串）不在本地拒绝，由远端决定；消费是否清空由 Driver 语义决定；不缓存、不自动重试或去重 | None | DP-080 已固定 `LogEntry`/Unix 毫秒/`Extra`、开放透传与 Writer 取舍；DP-081 增加 `MaxLogResponseBytes` 并实现；命令契约见 `docs/command-semantics.md` |
+| LOG-001 | `Session.LogTypes` 查询 Log Types | Session method | Implemented | Appium 3 `/session/{id}/se/log/types` | 每次远端读取的动态快照；集合可能受 Driver、Capability、当前 Context 和其他 Session 状态影响；开放字符串（包括空字符串），不做本地枚举或规范化 | Protocol | `logs.go`, `logs_test.go`, `docs/command-semantics.md`；严格校验数组元素与动态快照语义 |
+| LOG-002 | `Session.Logs` 按类型 Pull Logs | Session method | Implemented | Appium 3 `/session/{id}/se/log` | 单次有界结构化读取；`LogType`（包括空字符串）不在本地拒绝，由远端决定；消费是否清空由 Driver 语义决定；不缓存、不自动重试或去重 | Protocol | `logs.go`, `logs_test.go`, `limits.go`, `client.go`, `docs/command-semantics.md`；严格 Entry/Extra 解码与独立响应上限 |
 | BIDI-001 | 通用 WebDriver BiDi 连接与命令关联 | Session stream | Architecture | WebSocket / BiDi | Appium/Driver 必须返回可用 Endpoint | None | 先设计 `internal/bidi` |
 | BIDI-002 | 有界订阅、取消、背压和关闭 | Session stream | Architecture | BiDi Event Stream | 不自动重连 | None | 增加协议测试基础设施 |
 | LOG-003 | 通用 Streaming Logs | Session stream | Architecture | WebDriver BiDi | 依赖 BIDI-001/002 | None | 与平台日志事件分层 |
@@ -219,7 +219,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 |---|---|---|---|---|---|---|---|
 | INF-001 | 结构化 Error Code | Internal / test infrastructure | Implemented | Client error mapping | HTTP 路径已覆盖 | Protocol | `errors.go`, `command_error_test.go` |
 | INF-002 | Delivery State | Internal / test infrastructure | Implemented | wire response facts | 副作用命令不自动重试 | Protocol | `errors.go`, `command_delivery_test.go` |
-| INF-003 | 响应和远端错误大小限制 | Client option / callback | Implemented | `Limits` | Logs/BiDi 仍待扩展 | Protocol | `limits.go`, transport/codec tests |
+| INF-003 | 响应和远端错误大小限制 | Client option / callback | Implemented | `Limits` | BiDi 仍待扩展；Pull Logs 使用独立上限 | Protocol | `limits.go`, `client.go`, `logs_test.go`, transport/codec tests |
 | INF-004 | Base64 流式解码 | Internal / test infrastructure | Implemented | `internal/codec` | 已用于 Recording、Session Screenshot 和 Element Screenshot | Unit/Protocol | `internal/codec`, `recording.go`, `screenshot.go` |
 | INF-005 | HTTP Contract Test 工具 | Internal / test infrastructure | Implemented | `contracttest` | Test-only | Protocol | `contracttest/` |
 | INF-006 | BiDi Contract Test 工具 | Internal / test infrastructure | Architecture | Fake WebSocket/BiDi Server | Test-only | None | 与 BIDI-001 同步设计 |
