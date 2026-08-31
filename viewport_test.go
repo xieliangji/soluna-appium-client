@@ -245,6 +245,8 @@ func TestSessionViewportRectRejectsInvalidResponses(t *testing.T) {
 		{name: "null field", response: `{"left":null,"top":0,"width":10,"height":10}`},
 		{name: "wrong type", response: `{"left":"0","top":0,"width":10,"height":10}`},
 		{name: "alias fields", response: `{"x":0,"y":0,"width":10,"height":10}`},
+		{name: "uppercase left", response: `{"Left":0,"top":0,"width":10,"height":10}`},
+		{name: "uppercase top", response: `{"left":0,"TOP":0,"width":10,"height":10}`},
 		{name: "fractional", response: `{"left":0,"top":0,"width":1.5,"height":10}`},
 		{name: "negative origin", response: `{"left":-1,"top":0,"width":10,"height":10}`},
 		{name: "zero width", response: `{"left":0,"top":0,"width":0,"height":10}`},

@@ -101,12 +101,10 @@ func decodePixelRect(
 		return PixelRect{}, err
 	}
 
-	var payload struct {
-		Left   json.RawMessage `json:"left"`
-		Top    json.RawMessage `json:"top"`
-		Width  json.RawMessage `json:"width"`
-		Height json.RawMessage `json:"height"`
-	}
+	// Decode into an open map so JSON object keys are looked up with exact
+	// protocol spelling. encoding/json's struct-field matching otherwise
+	// accepts case variants such as "Left" for the required "left" field.
+	var payload map[string]json.RawMessage
 
 	if err := json.Unmarshal(value, &payload); err != nil {
 		return PixelRect{}, fmt.Errorf(
@@ -118,7 +116,7 @@ func decodePixelRect(
 	left, err := decodePixelRectInt(
 		ctx,
 		"left",
-		payload.Left,
+		payload["left"],
 	)
 	if err != nil {
 		return PixelRect{}, err
@@ -127,7 +125,7 @@ func decodePixelRect(
 	top, err := decodePixelRectInt(
 		ctx,
 		"top",
-		payload.Top,
+		payload["top"],
 	)
 	if err != nil {
 		return PixelRect{}, err
@@ -136,7 +134,7 @@ func decodePixelRect(
 	width, err := decodePixelRectInt(
 		ctx,
 		"width",
-		payload.Width,
+		payload["width"],
 	)
 	if err != nil {
 		return PixelRect{}, err
@@ -145,7 +143,7 @@ func decodePixelRect(
 	height, err := decodePixelRectInt(
 		ctx,
 		"height",
-		payload.Height,
+		payload["height"],
 	)
 	if err != nil {
 		return PixelRect{}, err
