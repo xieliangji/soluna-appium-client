@@ -12,6 +12,7 @@ import (
 )
 
 func TestIOSPressButtonProtocol(t *testing.T) {
+	observer := &operationObserver{}
 	recorder := contracttest.NewRecorder(
 		http.HandlerFunc(
 			func(
@@ -52,7 +53,9 @@ func TestIOSPressButtonProtocol(t *testing.T) {
 	defer server.Close()
 
 	client, err := server.NewClient(
-		appium.ClientOptions{},
+		appium.ClientOptions{
+			Observer: observer,
+		},
 	)
 	if err != nil {
 		t.Fatalf(
@@ -78,6 +81,7 @@ func TestIOSPressButtonProtocol(t *testing.T) {
 	}
 
 	recorder.Reset()
+	observer.reset()
 
 	if err := xcuitest.IOSPressButton(
 		context.Background(),
@@ -135,6 +139,48 @@ func TestIOSPressButtonProtocol(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
+
+	if len(observer.started) != 1 || len(observer.finished) != 1 {
+		t.Fatalf(
+			"unexpected observer event counts: started=%d finished=%d",
+			len(observer.started),
+			len(observer.finished),
+		)
+	}
+	if observer.started[0].Operation != "ios_press_button" {
+		t.Fatalf(
+			"unexpected started operation: %q",
+			observer.started[0].Operation,
+		)
+	}
+	if observer.finished[0].Operation != "ios_press_button" {
+		t.Fatalf(
+			"unexpected finished operation: %q",
+			observer.finished[0].Operation,
+		)
+	}
+}
+
+type operationObserver struct {
+	started  []appium.CommandStartedEvent
+	finished []appium.CommandFinishedEvent
+}
+
+func (o *operationObserver) OnCommandStarted(
+	event appium.CommandStartedEvent,
+) {
+	o.started = append(o.started, event)
+}
+
+func (o *operationObserver) OnCommandFinished(
+	event appium.CommandFinishedEvent,
+) {
+	o.finished = append(o.finished, event)
+}
+
+func (o *operationObserver) reset() {
+	o.started = nil
+	o.finished = nil
 }
 
 func TestIOSPressButtonRejectsNonXCUITestSession(t *testing.T) {

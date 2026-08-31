@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 // LocatorStrategy 表示 WebDriver/Appium 元素定位策略。
 type LocatorStrategy string

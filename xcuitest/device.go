@@ -73,8 +73,9 @@ func IOSPressButton(
 		}
 	}
 
-	_, err := session.ExecuteScript(
+	_, err := session.ExecuteScriptWithOperation(
 		ctx,
+		iosPressButtonOperation,
 		iosPressButtonScript,
 		[]any{
 			map[string]any{
@@ -115,8 +116,9 @@ func IOSDeviceScreenInfo(
 		return ScreenInfo{}, err
 	}
 
-	value, err := session.ExecuteScript(
+	value, err := session.ExecuteScriptWithOperation(
 		ctx,
+		iosDeviceScreenInfoOperation,
 		iosDeviceScreenInfoScript,
 		nil,
 	)

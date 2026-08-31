@@ -1,11 +1,16 @@
-package soluna_appium_client
+package appium
 
 import "time"
 
 // Observer 用于观察客户端命令的执行过程。
 //
-// Observer 只用于日志、指标和诊断，不参与命令执行结果的决策。
-// 回调方法没有返回值，客户端不会根据 Observer 的行为改变命令结果。
+// Observer 只用于日志、指标和诊断；回调正常返回时，客户端不会根据
+// Observer 的行为改变命令结果。两个回调均同步执行：OnCommandStarted 在
+// 传输开始前调用，OnCommandFinished 在命令链结束时调用。因此回调延迟会
+// 影响 API 调用延迟，甚至可能使调用方 context 在发送前结束。Observer 实现
+// 必须能够并发安全地接收来自多个 Session 或多个 goroutine 的事件，并应快速
+// 返回、不得阻塞或 panic；客户端不会为回调建立异步队列，也不会恢复 Observer
+// 的 panic。
 type Observer interface {
 	OnCommandStarted(event CommandStartedEvent)
 	OnCommandFinished(event CommandFinishedEvent)

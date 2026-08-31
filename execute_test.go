@@ -1,8 +1,9 @@
-package soluna_appium_client_test
+package appium_test
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"math"
 	"net/http"
 	"sync/atomic"
@@ -11,6 +12,95 @@ import (
 	appium "github.com/xieliangji/soluna-appium-client"
 	"github.com/xieliangji/soluna-appium-client/contracttest"
 )
+
+func TestExecuteScriptWithOperationPreservesIdentity(t *testing.T) {
+	session := newCommandErrorTestSession(
+		t,
+		func(
+			writer http.ResponseWriter,
+			request *http.Request,
+		) {
+			writer.WriteHeader(http.StatusInternalServerError)
+			_, _ = writer.Write(
+				[]byte(
+					`{"value":{"error":"unknown command","message":"failed"}}`,
+				),
+			)
+		},
+	)
+
+	_, err := session.ExecuteScriptWithOperation(
+		context.Background(),
+		"ios_press_button",
+		"mobile: pressButton",
+		[]any{
+			map[string]any{
+				"name": "home",
+			},
+		},
+	)
+	if err == nil {
+		t.Fatal("expected execute method error")
+	}
+
+	var clientErr *appium.Error
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("expected structured appium error: %v", err)
+	}
+
+	if clientErr.Operation != "ios_press_button" {
+		t.Fatalf(
+			"unexpected operation: expected %q, got %q",
+			"ios_press_button",
+			clientErr.Operation,
+		)
+	}
+
+	if clientErr.Delivery != appium.DeliveryAcknowledged {
+		t.Fatalf(
+			"unexpected delivery: expected %q, got %q",
+			appium.DeliveryAcknowledged,
+			clientErr.Delivery,
+		)
+	}
+}
+
+func TestExecuteScriptWithOperationRejectsUnstableIdentity(t *testing.T) {
+	session := newCommandErrorTestSession(
+		t,
+		func(
+			writer http.ResponseWriter,
+			request *http.Request,
+		) {
+			t.Fatalf("invalid operation must not reach execute route")
+		},
+	)
+
+	for _, operation := range []string{"", " ios_press_button", "ios_press_button "} {
+		t.Run(
+			operation,
+			func(t *testing.T) {
+				_, err := session.ExecuteScriptWithOperation(
+					context.Background(),
+					operation,
+					"mobile: pressButton",
+					nil,
+				)
+				if err == nil {
+					t.Fatal("expected invalid operation error")
+				}
+
+				if !appium.IsErrorCode(err, appium.CodeInvalidArgument) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+
+				if appium.DeliveryOf(err) != appium.DeliveryNotSent {
+					t.Fatalf("invalid operation must not be delivered: %v", err)
+				}
+			},
+		)
+	}
+}
 
 func TestExecuteScriptProtocol(t *testing.T) {
 	var executeCount atomic.Int32

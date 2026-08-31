@@ -1,10 +1,11 @@
-package soluna_appium_client
+package appium
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 	"unicode/utf8"
 
@@ -34,8 +35,55 @@ func (s *Session) ExecuteScript(
 	script string,
 	arguments []any,
 ) (json.RawMessage, error) {
-	client, err := s.commandClient(
+	return s.executeScriptWithOperation(
+		ctx,
 		executeScriptOperation,
+		script,
+		arguments,
+	)
+}
+
+// ExecuteScriptWithOperation 通过统一命令链执行一次同步 Execute Script。
+//
+// operation 只作为本地 Error 和 Observer 的稳定诊断标识，不会发送给远端；
+// 远端请求始终使用 W3C Execute Script 的固定路由和请求格式。
+// 该方法供官方平台扩展为其封装的 Execute Method 保留独立 identity；
+// 普通调用方不需要独立 identity 时应使用 ExecuteScript。
+//
+// operation 必须是非空且不带首尾空白的稳定标识。客户端不会根据它构造
+// HTTP Method、Route、脚本或参数，也不会因此增加重试、fallback 或其他策略。
+func (s *Session) ExecuteScriptWithOperation(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+) (json.RawMessage, error) {
+	if operation == "" || strings.TrimSpace(operation) != operation {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: operation,
+			Message:   "execute script operation must be non-empty and trimmed",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	return s.executeScriptWithOperation(
+		ctx,
+		operation,
+		script,
+		arguments,
+	)
+}
+
+// executeScriptWithOperation 在指定的本地 operation identity 下执行同步脚本。
+func (s *Session) executeScriptWithOperation(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+) (json.RawMessage, error) {
+	client, err := s.commandClient(
+		operation,
 	)
 	if err != nil {
 		return nil, err
@@ -46,7 +94,7 @@ func (s *Session) ExecuteScript(
 	err = executeScriptCommand(
 		ctx,
 		client,
-		executeScriptOperation,
+		operation,
 		s.id,
 		script,
 		arguments,

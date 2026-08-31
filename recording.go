@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 import (
 	"bytes"

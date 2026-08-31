@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 const (
 	defaultMaxResponseBytes           int64 = 16 << 20  // 普通命令响应默认上限：16 MiB

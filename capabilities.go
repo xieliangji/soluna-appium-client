@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 // Capabilities 表示一组 W3C WebDriver/Appium Capability。
 //

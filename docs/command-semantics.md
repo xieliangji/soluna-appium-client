@@ -105,6 +105,21 @@ Entry 或游标，不假设读取会清空 Driver 缓存，不自动轮询、分
 `LogsTo(io.Writer)`、JSONL 或其他 Writer 交付形式。完整公共类型和取舍见
 `docs/design.md` §10.1。
 
+## Execute Script 与平台 operation identity
+
+`Session.ExecuteScript` 和供已纳入 SDK 的平台扩展使用的
+`Session.ExecuteScriptWithOperation` 都发送同一个请求：
+
+```text
+POST /session/{sessionId}/execute/sync
+```
+
+后者的 `operation` 只写入本地 `Error.Operation` 和 Observer 事件，不进入请求体，
+也不参与 HTTP Method、Route、Discovery、fallback 或 retry。该参数必须是非空且不
+带首尾空白的稳定标识；它不是任意 Method/Route 的 Raw Command API。普通调用方
+无需区分平台 identity 时继续使用 `ExecuteScript`，平台函数应使用自己的低基数
+标识（例如 `ios_press_button`）调用受控入口。
+
 ## Session Screenshot
 
 `Session.Screenshot` 和 `Session.ScreenshotTo` 使用同一条 W3C Screenshot

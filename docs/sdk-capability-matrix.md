@@ -108,7 +108,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | DISC-001 | 读取 Command Catalog | Session method (`Commands`) | Implemented | Appium Runtime Discovery | Appium 3 | Protocol | `discovery.go`, `discovery_test.go`, `docs/command-semantics.md`；严格解码 `rest`/`bidi` 层级、必需 `base`/`driver`、可选 `plugins[name]` 与 HTTP/BiDi identity |
 | DISC-002 | 读取 Extension Catalog | Session method (`Extensions`) | Implemented | Appium Runtime Discovery | Appium 3 | Protocol | `discovery.go`, `discovery_test.go`, `docs/command-semantics.md`；严格解码 `rest.driver`/`rest.plugins[name]` 与 Execute Method identity |
 | DISC-003 | Catalog 本地 `Supports` helper | Session method | Implemented | 纯本地快照查询 | 不能视为执行成功保证 | Unit | `discovery.go`, `discovery_test.go`；按 HTTP、BiDi、Execute Method 分开的区分大小写精确匹配，Source 仅作 provenance |
-| OBS-001 | 命令 Observer | Client option / callback | Implemented | Client-side lifecycle callbacks | 不等同远端 Logs | Protocol | `observer.go`, `observer_test.go` |
+| OBS-001 | 命令 Observer | Client option / callback | Implemented | Client-side lifecycle callbacks；同步调用，调用方实现需并发安全、快速返回且不得 panic | 不等同远端 Logs | Protocol | `observer.go`, `observer_test.go` |
 
 ### 5.2 Element
 
@@ -140,7 +140,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| ACT-001 | `PerformActions` / `ReleaseActions` | Session method | Implemented | W3C Touch Pointer Actions | Driver 必须支持 touch pointer | Protocol | `actions.go`, `actions_test.go` |
+| ACT-001 | `PerformActions` / `ReleaseActions` | Session method | Implemented | W3C Touch Pointer Actions；`TouchAction` 零值明确无效，不编码为移动 | Driver 必须支持 touch pointer | Protocol | `actions.go`, `actions_test.go` |
 | ACT-002 | `Tap` / `LongPress` / `Swipe` | Session method | Implemented | W3C Actions 封装 | viewport 坐标 | Protocol | `actions.go`, `actions_test.go` |
 | ACT-003 | 多指 ActionSequence | Session method | Implemented | 多个 W3C pointer source | 具体手势兼容性需实机验证 | Protocol | `actions.go`, `actions_test.go` |
 | ALERT-001 | Alert 文本 | Session method | Implemented | W3C Get Alert Text | `no such alert` 映射为 `CodeAlertNotFound`；成功值为 JSON string 或 `null`，通过 `hasText` 区分 | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
@@ -170,7 +170,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | APP-003 | `AppState` | Session method | Implemented | Appium Query App State | 严格校验 0–4 | Protocol | `application.go`, `application_test.go` |
 | REC-001 | `StartRecording` | Session method | Implemented | Appium Screen Recording | Driver/Host 可能依赖外部工具 | Protocol | `recording.go`, `recording_test.go` |
 | REC-002 | `StopRecording` / `StopRecordingTo` | Session method | Implemented | Base64 media response | 独立 Recording 上限 | Protocol | `recording.go`, `recording_test.go` |
-| EXEC-001 | `ExecuteScript` | Session method | Implemented | W3C Execute Script | `mobile:` 扩展逃生口 | Protocol | `execute.go`, `execute_test.go` |
+| EXEC-001 | `ExecuteScript` / 受控 `ExecuteScriptWithOperation` | Session method | Implemented | W3C Execute Script；平台扩展可保留独立本地 operation identity | `mobile:` 扩展逃生口；不开放任意 Method/Route | Protocol | `execute.go`, `execute_test.go`；AD-027 |
 
 ### 5.7 Logs、Events 与等待
 
@@ -190,8 +190,8 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| XCUI-001 | `IOSPressButton` | Platform function | Implemented | `mobile: pressButton` / WDA | iOS；部分按键受设备和系统限制 | Protocol | `xcuitest/device.go`, `device_test.go` |
-| XCUI-002 | `IOSDeviceScreenInfo` | Platform function | Implemented | `mobile: deviceScreenInfo` / WDA | 报告 scale 与 status bar，不自动换算 | Protocol | `xcuitest/device.go`, `device_test.go` |
+| XCUI-001 | `IOSPressButton` | Platform function | Implemented | `mobile: pressButton` / WDA；通过受控 Execute Script 链保留 `ios_press_button` identity | iOS；部分按键受设备和系统限制 | Protocol | `xcuitest/device.go`, `device_test.go` |
+| XCUI-002 | `IOSDeviceScreenInfo` | Platform function | Implemented | `mobile: deviceScreenInfo` / WDA；通过受控 Execute Script 链保留 `ios_device_screen_info` identity | 报告 scale 与 status bar，不自动换算 | Protocol | `xcuitest/device.go`, `device_test.go` |
 | XCUI-003 | Picker Wheel 选择 | Platform function | Accepted | `mobile: selectPickerWheelValue` | iOS/XCUITest；通用 Actions 无稳定等价 | None | 优先平台候选 |
 | XCUI-004 | 按 label 处理 Alert | Platform function | Accepted | XCUITest Alert extension | 依赖通用 Alert API 先完成 | None | 只暴露标准 Alert 无法表达的增量 |
 | XCUI-005 | Simulated Location | Platform function | Accepted | WDA simulated location | iOS 16.4+；iOS 17 主要 macOS | None | 单独定义 Set/Get/Reset |

@@ -116,6 +116,10 @@ Execute Method 三类 execution identity，并固定 Source provenance、`params
 - 将 Screenshot 移入明确行为文件。
 - 排除 Element Screenshot、Viewport Screenshot 和裁剪。
 
+补充评估：当前 `MaxScreenshotResponseBytes` 同时作为完整 wire 响应和解码后
+截图数据的共同硬上限；`MaxRecordingResponseBytes` 同理。该保守资源策略暂不
+拆分为两个公共字段，只有独立 decoded 配额成为明确需求时再单独设计迁移规则。
+
 ### DP-051 Element Screenshot
 
 - 实现 `Element.Screenshot`、`Element.ScreenshotTo`。
@@ -157,6 +161,11 @@ Screenshot 的 crop rectangle 属于带环境、Context 和采集路径条件的
 四个整数像素字段执行原点、正面积和端点溢出校验。结果不缓存、不参与现有
 Find/Tap，也不建立 Screenshot 像素平面关联。
 
+补充优化（不改变计划队列）：根包增加受控的
+`Session.ExecuteScriptWithOperation` 入口，继续使用固定 Execute Script 路由，
+但允许已纳入 SDK 的平台扩展保留独立的本地 operation identity。该入口不开放
+任意 Method/Route，也不引入 Discovery、fallback 或 retry。
+
 ### DP-070 通用显式等待
 
 - 实现最小 `wait.Until`。
@@ -184,6 +193,9 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 与此前未找到诊断一并保留；本地 finder malformed 结果返回普通本地契约错误，
 不伪造远端 Code/Delivery。Elements 仅有空集合时返回 context 结果；实现不修改
 隐式或命令超时，不自动重新定位或恢复 Element，并补充了 stub 与协议回归测试。
+
+补充评估：Find 的 Window 交集语义和单次候选快照保持不变；remote command
+amplification 先通过基线数据评估，不在没有测量证据时替换查找算法。
 
 ### DP-080 Pull Logs 设计
 
