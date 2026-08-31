@@ -62,9 +62,10 @@ Element Screenshot 收到远端 `stale element reference`（映射为
 未知 Entry 字段按 `docs/design.md` 的递归 `Extra` 规则保留；无法保留的值同样
 按响应格式错误处理。
 
-`Logs` 的空 `LogType` 是发送前的本地参数错误，返回 `CodeInvalidArgument`、
-Delivery 为 `DeliveryNotSent`，不会发送远端请求。两种读取都使用独立的
-`Limits.MaxLogResponseBytes`；完整 HTTP 响应体超过配置上限时返回
+`LogType` 完全开放透传，包括空字符串；客户端不因值为空或未曾出现在
+`LogTypes` 结果中而本地拒绝，远端决定是否支持。可用 Log Type 集合是动态快照，
+可能随 Driver、Capabilities、当前 Context 或其他 Session 状态变化。两种读取都
+使用独立的 `Limits.MaxLogResponseBytes`；完整 HTTP 响应体超过配置上限时返回
 `CodeResponseTooLarge`，Delivery 为 `DeliveryAcknowledged`，不截断或交付部分
 Entry。远端日志错误、传输错误和 context 取消继续沿用统一命令投递语义；客户端
 不因读取看起来只读而自动重试、缓存或假设 Driver 已消费日志。

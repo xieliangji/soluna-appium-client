@@ -199,8 +199,10 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 
 已完成 Pull Logs 设计：根包使用开放的 `LogType`，通过 Appium 3 精确的
 `/session/{id}/se/log/types` 和 `/session/{id}/se/log` 路由提供一次性读取；
-`LogEntry` 严格要求 Unix epoch 毫秒 `int64`、`level` 和 `message`，未知字段
-递归保存在独立 `Extra` 中并保持 Entry 顺序。DP-081 将增加独立的
+`LogType` 包括空字符串也原样透传，可用集合是可能随 Driver、Capability、当前
+Context 和其他 Session 状态变化的动态快照；`LogEntry` 严格要求 Unix epoch 毫秒
+`int64`、`level` 和 `message`，未知字段递归保存在独立 `Extra` 中并保持 Entry 顺序。
+DP-081 将增加独立的
 `MaxLogResponseBytes`（默认 32 MiB），超限或任一条目格式错误都不返回部分结果。
 设计不假设 Driver 读取会清空或保留缓存，不做本地缓存、游标、轮询、合并、去重、
 自动重试或 Runtime Discovery 门禁；结构化集合不增加 `Writer`/JSONL 交付形式。
@@ -208,7 +210,7 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 
 ### DP-081 Pull Logs 实现
 
-- 实现 Log Types 和按类型读取。
+- 实现 Log Types 和按类型读取（包括空 `LogType` 的透传，由远端决定是否支持）。
 - 增加 `MaxLogResponseBytes`。
 - 严格解码集合和条目，不假设读取会清空缓存。
 - 排除自动轮询、合并、去重和持续订阅。
