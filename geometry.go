@@ -19,3 +19,15 @@ type Rect struct {
 	Width  float64
 	Height float64
 }
+
+// PixelRect 表示 Driver 报告的整数像素 viewport 几何。
+//
+// X 和 Y 是 Driver 命令定义的像素平面中的左上角偏移，Width 和 Height
+// 是正的像素尺寸。该类型不绑定任何具体 Screenshot，也不表示 WebDriver
+// 坐标或截图缓冲区索引。
+type PixelRect struct {
+	X      int
+	Y      int
+	Width  int
+	Height int
+}

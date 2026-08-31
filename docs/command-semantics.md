@@ -87,6 +87,33 @@ Viewport Screenshot 和本地裁剪不属于本命令契约。
 `StopRecordingTo` 使用相同的流式输出错误语义：录屏响应有效但目标 Writer
 失败时返回 `CodeOutputFailed`，而不是 `CodeResponseInvalid`。
 
+## Session ViewportRect
+
+`Session.ViewportRect` 通过根包统一 Execute Script 链读取当前 Driver 的
+viewport 像素几何快照：
+
+```text
+POST /session/{sessionId}/execute/sync
+script: "mobile: viewportRect"
+args:   []
+```
+
+只接受创建 Session 后远端确认的精确 `automationName` `XCUITest` 或
+`UiAutomator2`。前者映射 Driver 内部的 `getViewportRect`，后者映射
+`mobileViewPortRect`；两者对外仍使用上面的同一脚本名。未知 Driver 在发送前
+返回 `CodeUnsupported`、Delivery 为 `DeliveryNotSent`，不调用 Runtime Discovery
+或其他探测命令。
+
+成功 value 必须是 JSON object，并同时包含 `left`、`top`、`width`、`height`
+四个 JSON number 字段。字段值必须是有限、可无损表示为当前 Go `int` 的整数；
+原点不得为负，宽高必须为正，且右/下端点不得发生 `int` 溢出。缺失、`null`、
+错误类型、别名字段、小数、超范围或溢出均返回 `CodeResponseInvalid`、Delivery
+为 `DeliveryAcknowledged`。未知字段可以存在但不会参与几何计算。
+
+返回的 `PixelRect` 只承载 Driver 报告的像素几何，不缓存、不执行 scale/density、
+orientation 或 status bar 转换，也不自动关联或裁剪 Screenshot；每次调用都会
+重新发送一次 Execute Script 请求。
+
 ## Element Screenshot
 
 `Element.Screenshot` 和 `Element.ScreenshotTo` 使用 W3C Element Screenshot

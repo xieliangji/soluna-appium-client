@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-060`（已完成；下一项需显式选择）
-> 最后更新：2026-08-30
+> 当前计划项：`DP-061`（已完成；下一项需显式选择）
+> 最后更新：2026-08-31
 
 ## Agent 执行约束
 
@@ -28,7 +28,7 @@
 | 6 | `DP-050` Screenshot 资源模型 | `VIS-003..004` | Done | — |
 | 7 | `DP-051` Element Screenshot | `ELM-006..007` | Done | DP-050 |
 | 8 | `DP-060` Viewport 坐标设计 | `VIS-006` | Done | — |
-| 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Queued | DP-060 |
+| 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Done | DP-060 |
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Queued | — |
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Queued | DP-070 |
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Queued | — |
@@ -151,6 +151,11 @@ Screenshot 的 crop rectangle 属于带环境、Context 和采集路径条件的
 - 按远端 AutomationName 映射 Driver 命令；未知 Driver 本地拒绝。
 - 覆盖两 Driver 的严格协议测试。
 - 排除 Viewport Screenshot、隐式缩放和修改 Find/Tap。
+
+已完成根包实现和协议测试：通过统一 Execute Script 链发送
+`mobile: viewportRect`，对 XCUITest 与 UiAutomator2 执行精确 Driver 门禁，并对
+四个整数像素字段执行原点、正面积和端点溢出校验。结果不缓存、不参与现有
+Find/Tap，也不建立 Screenshot 像素平面关联。
 
 ### DP-070 通用显式等待
 

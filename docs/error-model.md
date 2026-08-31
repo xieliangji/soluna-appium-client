@@ -62,6 +62,19 @@ nil Writer 属于本地参数错误，返回 `CodeInvalidArgument`、Delivery �
 已经写入的字节数和原始 Writer error；Base64 或响应格式错误仍返回
 `CodeResponseInvalid`。
 
+## ViewportRect 响应与 Driver 门禁
+
+`Session.ViewportRect` 只允许远端确认的 `XCUITest` 和 `UiAutomator2`。空、未初始化
+或不可用于普通命令的 Session 返回 `CodeInvalidArgument`；其他
+`automationName` 在发送前返回 `CodeUnsupported`，两者 Delivery 均为
+`DeliveryNotSent`，且不会触发额外探测请求。
+
+Viewport value 缺失 `left`、`top`、`width` 或 `height`，为 `null`、非 JSON number、
+小数、非有限值、超出 `int` 范围、负原点、非正尺寸或端点溢出时，返回
+`CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`，不返回部分
+`PixelRect`。远端 Driver、Session、传输和 context 错误继续使用统一命令映射；
+客户端不自动重试、换算或缓存该结果。
+
 ## Runtime Discovery 响应错误
 
 DP-041 的 `Session.Commands` 和 `Session.Extensions` 对目录响应执行整体严格

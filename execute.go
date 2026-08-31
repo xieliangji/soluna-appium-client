@@ -41,46 +41,15 @@ func (s *Session) ExecuteScript(
 		return nil, err
 	}
 
-	command, err := wire.NewCommand(
-		executeScriptOperation,
-		http.MethodPost,
-		"session",
-		s.id,
-		"execute",
-		"sync",
-	)
-	if err != nil {
-		return nil, &Error{
-			Code:      CodeInvalidConfig,
-			Operation: executeScriptOperation,
-			Message:   "execute script command definition is invalid",
-			Delivery:  DeliveryNotSent,
-			Cause:     err,
-		}
-	}
-
-	// W3C 协议要求 args 必须是数组。
-	// nil 在 Go 中需要显式转换为空 slice，避免编码成 JSON null。
-	if arguments == nil {
-		arguments = []any{}
-	}
-
-	request := struct {
-		Script string `json:"script"`
-		Args   []any  `json:"args"`
-	}{
-		Script: script,
-		Args:   arguments,
-	}
-
 	var result json.RawMessage
 
-	err = client.executeCommand(
+	err = executeScriptCommand(
 		ctx,
-		command,
-		request,
-		client.commandTimeout,
-		client.limits.MaxResponseBytes,
+		client,
+		executeScriptOperation,
+		s.id,
+		script,
+		arguments,
 		func(
 			ctx context.Context,
 			value json.RawMessage,
@@ -102,6 +71,62 @@ func (s *Session) ExecuteScript(
 	}
 
 	return result, nil
+}
+
+// executeScriptCommand 通过统一命令链执行一次同步 Execute Script。
+//
+// operation 只用于错误和观测事件标识；发送给远端的脚本和参数仍遵循
+// W3C Execute Script 请求契约。具体调用方可以提供自己的 value decoder，
+// 以便在同一条执行链中完成命令专有的响应校验。
+func executeScriptCommand(
+	ctx context.Context,
+	client *Client,
+	operation string,
+	sessionID string,
+	script string,
+	arguments []any,
+	decoder responseDecoder,
+) error {
+	command, err := wire.NewCommand(
+		operation,
+		http.MethodPost,
+		"session",
+		sessionID,
+		"execute",
+		"sync",
+	)
+	if err != nil {
+		return &Error{
+			Code:      CodeInvalidConfig,
+			Operation: operation,
+			Message:   "execute script command definition is invalid",
+			Delivery:  DeliveryNotSent,
+			Cause:     err,
+		}
+	}
+
+	// W3C 协议要求 args 必须是数组。
+	// nil 在 Go 中需要显式转换为空 slice，避免编码成 JSON null。
+	if arguments == nil {
+		arguments = []any{}
+	}
+
+	request := struct {
+		Script string `json:"script"`
+		Args   []any  `json:"args"`
+	}{
+		Script: script,
+		Args:   arguments,
+	}
+
+	return client.executeCommand(
+		ctx,
+		command,
+		request,
+		client.commandTimeout,
+		client.limits.MaxResponseBytes,
+		decoder,
+	)
 }
 
 // executeCommand 执行一条 WebDriver/Appium 远端命令。
