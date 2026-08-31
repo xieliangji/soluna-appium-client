@@ -161,10 +161,13 @@ Screenshot 的 crop rectangle 属于带环境、Context 和采集路径条件的
 四个整数像素字段执行原点、正面积和端点溢出校验。结果不缓存、不参与现有
 Find/Tap，也不建立 Screenshot 像素平面关联。
 
-补充优化（不改变计划队列）：根包增加受控的
-`Session.ExecuteScriptWithOperation` 入口，继续使用固定 Execute Script 路由，
-但允许已纳入 SDK 的平台扩展保留独立的本地 operation identity。该入口不开放
-任意 Method/Route，也不引入 Discovery、fallback 或 retry。
+补充优化（不改变计划队列）：根包增加固定路由的高级
+`Session.ExecuteScriptWithOperation` 与
+`Session.ExecuteScriptWithOperationAndDecode` 入口，允许平台扩展保留独立的本地
+operation identity，并让 typed value decoder 在统一执行链的 decoder slot 中完成，
+使响应格式错误的 Error 与 Observer Finished 保持相同的 StatusCode、Delivery 和
+operation。operation 采用 `[a-z][a-z0-9_]{0,63}` 格式，不开放任意 Method/Route，
+也不引入 Discovery、fallback 或 retry。
 
 ### DP-070 通用显式等待
 
@@ -411,6 +414,12 @@ DP-081 将增加独立的
 - 审查选定范围内的导出 API、GoDoc、命名、零值和包边界。
 - 确认根包与平台包无重复能力，平台导出函数使用 `IOS` / `Android` 前缀。
 - 完成命令、错误、坐标、兼容性和发布文档。
+- 建立 `Find` / `FindElements` 的 command amplification 基线，至少记录
+  candidate count、Rect probes、首个可见候选位置和总耗时；不预设硬性能阈值，
+  也不因基线任务改变现有查找语义。
+- 对大录屏执行一次真实 memory benchmark，区分 `StopRecordingTo` 的解码后输出
+  峰值与完整 wire response 缓冲成本；没有独立配额需求或实测证据时不改变当前
+  media limit 模型。
 - 运行完整 `go test ./...`、`go test -race ./...` 和声明环境的 smoke suite。
 - 未验证组合不作稳定承诺。
 - 不为表面 API 完整加入未规划能力。

@@ -186,12 +186,17 @@ Session 为空、未初始化或仅用于清理时返回参数类错误。平台
 
 平台命令应通过根包公开的标准能力进入统一执行链，例如 W3C Script Execution 或后续明确的公共协议方法。平台包不得直接创建 HTTP Client、拼接 Appium Endpoint 或绕过根包错误与限制模型。
 
-对于已经纳入 SDK 的平台 Execute Method，根包提供受控的
-`Session.ExecuteScriptWithOperation` 入口。该入口仍然只发送固定的 W3C
-Execute Script 路由；`operation` 仅用于本地错误和 Observer identity，不参与
-HTTP Method、Route、脚本参数、Discovery、fallback 或 retry。平台包可以用它保留
-自己的低基数 operation，普通调用方不需要独立 identity 时继续使用
-`Session.ExecuteScript`。这不是任意 Method/Route 的 Raw API。
+根包提供两个固定路由的高级 Execute Script 入口：
+`Session.ExecuteScriptWithOperation` 返回原始 `value`，
+`Session.ExecuteScriptWithOperationAndDecode` 接收调用方的 `value` decoder。
+两者的 `operation` 都是调用方提供的诊断 identity，只用于本地错误和 Observer，
+必须匹配 ASCII 格式 `[a-z][a-z0-9_]{0,63}`，不参与 HTTP Method、Route、脚本
+参数、Discovery、fallback 或 retry。第二个入口的 decoder 在统一
+`executeCommand` decoder slot 中、`Observer.OnCommandFinished` 之前同步执行；
+decoder 错误由根包统一映射并保留 HTTP StatusCode、Delivery 和 operation。平台包
+可以用它实现强类型 Execute Method；这是跨包传递命令专有 decoder 的唯一受控边界，
+不再提供更泛化的 execute hook。普通调用方不需要独立 identity 时继续使用
+`Session.ExecuteScript`。这两个入口都不是任意 Method/Route 的 Raw API。
 
 平台特有事件也由根包建立的 BiDi 通道交付；平台包只定义事件解码和强类型结果。
 
@@ -914,7 +919,8 @@ internal/bidi       BiDi 协议实现
 | AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
 | AD-025 | Accepted | ViewportRect 使用独立的 Driver 像素几何 `PixelRect`；该类型不绑定具体 Screenshot buffer，Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver、Driver pixel geometry 与具体图像平面混用，并把 Screenshot 裁剪关系留给显式兼容性验证 |
 | AD-026 | Accepted | Pull Logs 使用完全开放透传的 `LogType`（包括空字符串）和严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
-| AD-027 | Accepted | 已纳入 SDK 的平台 Execute Method 使用根包固定路由的 `Session.ExecuteScriptWithOperation`；operation 只作为本地诊断 identity，不开放任意 Method/Route | 保持平台命令的错误与 Observer identity，同时维持统一执行链和 Raw API 排除边界 |
+| AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
+| AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

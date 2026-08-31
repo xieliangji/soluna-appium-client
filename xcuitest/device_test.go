@@ -545,6 +545,27 @@ func TestIOSDeviceScreenInfoRejectsInvalidResponse(t *testing.T) {
 			}}`,
 		},
 		{
+			name: "case variant status bar size",
+			response: `{"value":{
+				"StatusBarSize":{"width":414,"height":48},
+				"scale":3
+			}}`,
+		},
+		{
+			name: "case variant scale",
+			response: `{"value":{
+				"statusBarSize":{"width":414,"height":48},
+				"Scale":3
+			}}`,
+		},
+		{
+			name: "case variant nested fields",
+			response: `{"value":{
+				"statusBarSize":{"Width":414,"Height":48},
+				"scale":3
+			}}`,
+		},
+		{
 			name: "invalid scale type",
 			response: `{"value":{
 				"statusBarSize":{"width":414,"height":48},
@@ -557,6 +578,7 @@ func TestIOSDeviceScreenInfoRejectsInvalidResponse(t *testing.T) {
 		t.Run(
 			testCase.name,
 			func(t *testing.T) {
+				observer := &operationObserver{}
 				recorder := contracttest.NewRecorder(
 					http.HandlerFunc(
 						func(
@@ -597,7 +619,9 @@ func TestIOSDeviceScreenInfoRejectsInvalidResponse(t *testing.T) {
 				defer server.Close()
 
 				client, err := server.NewClient(
-					appium.ClientOptions{},
+					appium.ClientOptions{
+						Observer: observer,
+					},
 				)
 				if err != nil {
 					t.Fatalf(
@@ -623,6 +647,7 @@ func TestIOSDeviceScreenInfoRejectsInvalidResponse(t *testing.T) {
 				}
 
 				recorder.Reset()
+				observer.reset()
 
 				info, err := xcuitest.IOSDeviceScreenInfo(
 					context.Background(),
@@ -674,6 +699,53 @@ func TestIOSDeviceScreenInfoRejectsInvalidResponse(t *testing.T) {
 					t.Fatalf(
 						"unexpected operation: %q",
 						appiumErr.Operation,
+					)
+				}
+				if appiumErr.StatusCode != http.StatusOK {
+					t.Fatalf(
+						"unexpected HTTP status: expected %d, got %d",
+						http.StatusOK,
+						appiumErr.StatusCode,
+					)
+				}
+
+				if len(observer.started) != 1 || len(observer.finished) != 1 {
+					t.Fatalf(
+						"unexpected observer event counts: started=%d finished=%d",
+						len(observer.started),
+						len(observer.finished),
+					)
+				}
+
+				if observer.started[0].Operation != "ios_device_screen_info" {
+					t.Fatalf(
+						"unexpected started operation: %q",
+						observer.started[0].Operation,
+					)
+				}
+				if observer.finished[0].Operation != "ios_device_screen_info" {
+					t.Fatalf(
+						"unexpected finished operation: %q",
+						observer.finished[0].Operation,
+					)
+				}
+				if observer.finished[0].ErrorCode != appium.CodeResponseInvalid {
+					t.Fatalf(
+						"unexpected finished error code: %q",
+						observer.finished[0].ErrorCode,
+					)
+				}
+				if observer.finished[0].StatusCode != http.StatusOK {
+					t.Fatalf(
+						"unexpected finished HTTP status: expected %d, got %d",
+						http.StatusOK,
+						observer.finished[0].StatusCode,
+					)
+				}
+				if observer.finished[0].Delivery != appium.DeliveryAcknowledged {
+					t.Fatalf(
+						"unexpected finished delivery: %q",
+						observer.finished[0].Delivery,
 					)
 				}
 

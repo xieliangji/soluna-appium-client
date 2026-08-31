@@ -22,6 +22,12 @@ v0.x 的公共 API、错误 identity 和命令语义仍可能在设计补充或�
 不兼容变化。每次此类变化都应同步更新能力矩阵、命令语义或设计决策，并在发布
 说明中列出迁移影响。
 
+高级 `ExecuteScriptWithOperation` 与
+`ExecuteScriptWithOperationAndDecode` 使用调用方提供的、格式为
+`[a-z][a-z0-9_]{0,63}` 的 ASCII operation identity；该 identity 只用于本地
+诊断，固定远端路由不变。平台强类型 decoder 的错误在统一命令链中归一化，不能
+由平台包在命令返回后另行构造，从而保持 Observer 与调用方错误的一致性。
+
 ## 验证状态
 
 单元测试和协议测试不构成真实环境兼容承诺。具体 Appium、Driver、WDA、Host

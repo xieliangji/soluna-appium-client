@@ -3,9 +3,11 @@ package appium_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"math"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -76,13 +78,45 @@ func TestExecuteScriptWithOperationRejectsUnstableIdentity(t *testing.T) {
 		},
 	)
 
-	for _, operation := range []string{"", " ios_press_button", "ios_press_button "} {
+	for _, testCase := range []struct {
+		name      string
+		operation string
+	}{
+		{
+			name:      "empty",
+			operation: "",
+		},
+		{
+			name:      "leading space",
+			operation: " ios_press_button",
+		},
+		{
+			name:      "trailing space",
+			operation: "ios_press_button ",
+		},
+		{
+			name:      "uppercase",
+			operation: "IOS_PRESS_BUTTON",
+		},
+		{
+			name:      "hyphen",
+			operation: "ios-press-button",
+		},
+		{
+			name:      "newline",
+			operation: "ios_press_button\nextra",
+		},
+		{
+			name:      "too long",
+			operation: strings.Repeat("a", 65),
+		},
+	} {
 		t.Run(
-			operation,
+			testCase.name,
 			func(t *testing.T) {
 				_, err := session.ExecuteScriptWithOperation(
 					context.Background(),
-					operation,
+					testCase.operation,
 					"mobile: pressButton",
 					nil,
 				)
@@ -97,8 +131,113 @@ func TestExecuteScriptWithOperationRejectsUnstableIdentity(t *testing.T) {
 				if appium.DeliveryOf(err) != appium.DeliveryNotSent {
 					t.Fatalf("invalid operation must not be delivered: %v", err)
 				}
+
+				var clientErr *appium.Error
+				if !errors.As(err, &clientErr) {
+					t.Fatalf("expected structured operation error: %v", err)
+				}
+				if clientErr.Operation != "execute_script" {
+					t.Fatalf(
+						"invalid identity must use canonical operation: %q",
+						clientErr.Operation,
+					)
+				}
 			},
 		)
+	}
+}
+
+func TestExecuteScriptWithOperationAndDecodeMapsDecoderFailure(t *testing.T) {
+	session := newCommandErrorTestSession(
+		t,
+		func(
+			writer http.ResponseWriter,
+			request *http.Request,
+		) {
+			writer.WriteHeader(http.StatusOK)
+			_, _ = writer.Write(
+				[]byte(`{"value":{"unexpected":true}}`),
+			)
+		},
+	)
+
+	decoderCalled := false
+	err := session.ExecuteScriptWithOperationAndDecode(
+		context.Background(),
+		"ios_device_screen_info",
+		"mobile: deviceScreenInfo",
+		nil,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			decoderCalled = true
+			return errors.New("typed response is invalid")
+		},
+	)
+	if err == nil {
+		t.Fatal("expected decoder failure")
+	}
+	if !decoderCalled {
+		t.Fatal("expected response decoder to run in execution chain")
+	}
+
+	var clientErr *appium.Error
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("expected structured appium error: %v", err)
+	}
+	if clientErr.Code != appium.CodeResponseInvalid {
+		t.Fatalf("unexpected error code: %q", clientErr.Code)
+	}
+	if clientErr.Operation != "ios_device_screen_info" {
+		t.Fatalf("unexpected operation: %q", clientErr.Operation)
+	}
+	if clientErr.StatusCode != http.StatusOK {
+		t.Fatalf(
+			"unexpected HTTP status: expected %d, got %d",
+			http.StatusOK,
+			clientErr.StatusCode,
+		)
+	}
+	if clientErr.Delivery != appium.DeliveryAcknowledged {
+		t.Fatalf("unexpected delivery: %q", clientErr.Delivery)
+	}
+}
+
+func TestExecuteScriptWithOperationAndDecodeRejectsNilDecoder(t *testing.T) {
+	session := newCommandErrorTestSession(
+		t,
+		func(
+			writer http.ResponseWriter,
+			request *http.Request,
+		) {
+			t.Fatalf("nil decoder must not reach execute route")
+		},
+	)
+
+	err := session.ExecuteScriptWithOperationAndDecode(
+		context.Background(),
+		"ios_device_screen_info",
+		"mobile: deviceScreenInfo",
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatal("expected nil decoder error")
+	}
+	if !appium.IsErrorCode(err, appium.CodeInvalidArgument) {
+		t.Fatalf("unexpected error code: %v", err)
+	}
+	if appium.DeliveryOf(err) != appium.DeliveryNotSent {
+		t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
+	}
+
+	var clientErr *appium.Error
+	if !errors.As(err, &clientErr) {
+		t.Fatalf("expected structured appium error: %v", err)
+	}
+	if clientErr.Operation != "ios_device_screen_info" {
+		t.Fatalf("unexpected operation: %q", clientErr.Operation)
 	}
 }
 

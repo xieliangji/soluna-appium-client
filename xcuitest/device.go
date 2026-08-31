@@ -1,6 +1,7 @@
 package xcuitest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -116,41 +117,48 @@ func IOSDeviceScreenInfo(
 		return ScreenInfo{}, err
 	}
 
-	value, err := session.ExecuteScriptWithOperation(
+	var info ScreenInfo
+
+	err := session.ExecuteScriptWithOperationAndDecode(
 		ctx,
 		iosDeviceScreenInfoOperation,
 		iosDeviceScreenInfoScript,
 		nil,
+		func(
+			ctx context.Context,
+			value json.RawMessage,
+		) error {
+			decoded, decodeErr := decodeIOSDeviceScreenInfo(
+				ctx,
+				value,
+			)
+			if decodeErr != nil {
+				return decodeErr
+			}
+
+			info = decoded
+			return nil
+		},
 	)
 	if err != nil {
 		return ScreenInfo{}, err
-	}
-
-	info, err := decodeIOSDeviceScreenInfo(value)
-	if err != nil {
-		return ScreenInfo{}, &appium.Error{
-			Code:      appium.CodeResponseInvalid,
-			Operation: iosDeviceScreenInfoOperation,
-			Message:   "invalid iOS device screen info response",
-			Delivery:  appium.DeliveryAcknowledged,
-			Cause:     err,
-		}
 	}
 
 	return info, nil
 }
 
 func decodeIOSDeviceScreenInfo(
+	ctx context.Context,
 	value json.RawMessage,
 ) (ScreenInfo, error) {
-	var payload struct {
-		StatusBarSize *struct {
-			Width  *float64 `json:"width"`
-			Height *float64 `json:"height"`
-		} `json:"statusBarSize"`
-
-		Scale *float64 `json:"scale"`
+	if err := ctx.Err(); err != nil {
+		return ScreenInfo{}, err
 	}
+
+	// Decode into an open map so JSON object keys are looked up with exact
+	// protocol spelling. encoding/json's struct-field matching otherwise
+	// accepts case variants such as "Scale" for the required "scale" field.
+	var payload map[string]json.RawMessage
 
 	if err := json.Unmarshal(
 		value,
@@ -159,35 +167,84 @@ func decodeIOSDeviceScreenInfo(
 		return ScreenInfo{}, err
 	}
 
-	if payload.StatusBarSize == nil {
+	statusBarValue, ok := payload["statusBarSize"]
+	if !ok || isJSONNull(statusBarValue) {
 		return ScreenInfo{}, errors.New(
 			"iOS device screen info does not contain statusBarSize",
 		)
 	}
 
-	if payload.StatusBarSize.Width == nil {
+	var statusBarPayload map[string]json.RawMessage
+	if err := json.Unmarshal(
+		statusBarValue,
+		&statusBarPayload,
+	); err != nil {
+		return ScreenInfo{}, err
+	}
+
+	width, err := decodeIOSDeviceScreenInfoNumber(
+		statusBarPayload,
+		"width",
+	)
+	if err != nil {
 		return ScreenInfo{}, errors.New(
 			"iOS device screen info statusBarSize does not contain width",
 		)
 	}
 
-	if payload.StatusBarSize.Height == nil {
+	height, err := decodeIOSDeviceScreenInfoNumber(
+		statusBarPayload,
+		"height",
+	)
+	if err != nil {
 		return ScreenInfo{}, errors.New(
 			"iOS device screen info statusBarSize does not contain height",
 		)
 	}
 
-	if payload.Scale == nil {
+	scale, err := decodeIOSDeviceScreenInfoNumber(
+		payload,
+		"scale",
+	)
+	if err != nil {
 		return ScreenInfo{}, errors.New(
 			"iOS device screen info does not contain scale",
 		)
 	}
 
+	if err := ctx.Err(); err != nil {
+		return ScreenInfo{}, err
+	}
+
 	return ScreenInfo{
 		StatusBarSize: ScreenSize{
-			Width:  *payload.StatusBarSize.Width,
-			Height: *payload.StatusBarSize.Height,
+			Width:  width,
+			Height: height,
 		},
-		Scale: *payload.Scale,
+		Scale: scale,
 	}, nil
+}
+
+func decodeIOSDeviceScreenInfoNumber(
+	payload map[string]json.RawMessage,
+	field string,
+) (float64, error) {
+	value, ok := payload[field]
+	if !ok || isJSONNull(value) {
+		return 0, errors.New("required number is missing")
+	}
+
+	var decoded float64
+	if err := json.Unmarshal(value, &decoded); err != nil {
+		return 0, err
+	}
+
+	return decoded, nil
+}
+
+func isJSONNull(value json.RawMessage) bool {
+	return bytes.Equal(
+		bytes.TrimSpace(value),
+		[]byte("null"),
+	)
 }

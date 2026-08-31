@@ -163,6 +163,13 @@ Delivery 只描述投递事实，不代表命令是否可安全重试。
 远端错误文本和 JSON 数据在进入公共 `Error` 前执行脱敏和大小限制。
 公共错误文本不直接包含未处理的远端敏感数据。
 
-`Error.Operation` 和 Observer 事件使用客户端定义的低基数 operation identity。
-平台 Execute Method 通过根包的受控 Execute Script 入口保留自身 identity（例如
-`ios_press_button`）；该 identity 不改变实际 HTTP Method、Route 或远端请求体。
+`Error.Operation` 和 Observer 事件使用客户端定义或高级调用方提供且格式有界的
+低基数 operation identity。平台 Execute Method 可以通过根包的高级 Execute Script
+入口保留自身 identity（例如 `ios_press_button`）；该 identity 不改变实际 HTTP
+Method、Route 或远端请求体。
+
+高级 Execute Script 的 value decoder 在统一命令执行链中、Observer Finished 之前
+运行。decoder 对平台响应格式的校验失败按 `CodeResponseInvalid` 归一化，并保留
+实际 HTTP `StatusCode`、`DeliveryAcknowledged` 和同一个 `Operation`；因此调用方
+错误与 Observer 看到的是同一条完整命令语义，不得在执行链返回后再单独构造响应
+错误。

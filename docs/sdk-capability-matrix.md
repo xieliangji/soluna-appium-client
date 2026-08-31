@@ -170,7 +170,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | APP-003 | `AppState` | Session method | Implemented | Appium Query App State | 严格校验 0–4 | Protocol | `application.go`, `application_test.go` |
 | REC-001 | `StartRecording` | Session method | Implemented | Appium Screen Recording | Driver/Host 可能依赖外部工具 | Protocol | `recording.go`, `recording_test.go` |
 | REC-002 | `StopRecording` / `StopRecordingTo` | Session method | Implemented | Base64 media response | 独立 Recording 上限 | Protocol | `recording.go`, `recording_test.go` |
-| EXEC-001 | `ExecuteScript` / 受控 `ExecuteScriptWithOperation` | Session method | Implemented | W3C Execute Script；平台扩展可保留独立本地 operation identity | `mobile:` 扩展逃生口；不开放任意 Method/Route | Protocol | `execute.go`, `execute_test.go`；AD-027 |
+| EXEC-001 | `ExecuteScript` / `ExecuteScriptWithOperation` / `ExecuteScriptWithOperationAndDecode` | Session method | Implemented | W3C Execute Script；高级调用方可提供格式有界的本地 operation identity 与 value decoder | `mobile:` 扩展逃生口；不开放任意 Method/Route；decoder 错误进入统一执行链 | Protocol | `execute.go`, `execute_test.go`；AD-027、AD-028 |
 
 ### 5.7 Logs、Events 与等待
 
@@ -190,8 +190,8 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| XCUI-001 | `IOSPressButton` | Platform function | Implemented | `mobile: pressButton` / WDA；通过受控 Execute Script 链保留 `ios_press_button` identity | iOS；部分按键受设备和系统限制 | Protocol | `xcuitest/device.go`, `device_test.go` |
-| XCUI-002 | `IOSDeviceScreenInfo` | Platform function | Implemented | `mobile: deviceScreenInfo` / WDA；通过受控 Execute Script 链保留 `ios_device_screen_info` identity | 报告 scale 与 status bar，不自动换算 | Protocol | `xcuitest/device.go`, `device_test.go` |
+| XCUI-001 | `IOSPressButton` | Platform function | Implemented | `mobile: pressButton` / WDA；通过固定路由的高级 Execute Script 链保留 `ios_press_button` identity | iOS；部分按键受设备和系统限制 | Protocol | `xcuitest/device.go`, `device_test.go` |
+| XCUI-002 | `IOSDeviceScreenInfo` | Platform function | Implemented | `mobile: deviceScreenInfo` / WDA；通过带 typed decoder 的统一 Execute Script 链保留 `ios_device_screen_info` identity | 报告 scale 与 status bar，不自动换算 | Protocol | `xcuitest/device.go`, `device_test.go` |
 | XCUI-003 | Picker Wheel 选择 | Platform function | Accepted | `mobile: selectPickerWheelValue` | iOS/XCUITest；通用 Actions 无稳定等价 | None | 优先平台候选 |
 | XCUI-004 | 按 label 处理 Alert | Platform function | Accepted | XCUITest Alert extension | 依赖通用 Alert API 先完成 | None | 只暴露标准 Alert 无法表达的增量 |
 | XCUI-005 | Simulated Location | Platform function | Accepted | WDA simulated location | iOS 16.4+；iOS 17 主要 macOS | None | 单独定义 Set/Get/Reset |
