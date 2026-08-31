@@ -63,6 +63,44 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Session Pull Logs（DP-080 设计契约，待 DP-081 实现）
+
+Pull Logs 只提供一次性的 Session 级批量读取。DP-081 将通过根包统一 HTTP
+执行链实现以下 Appium 3 路由；`/se/` 是标准路由的一部分，不使用历史或
+Driver 专用的 `/log` fallback：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Session.LogTypes` | GET | `/session/{sessionId}/se/log/types` | 无 | JSON string 数组，解码为 `[]LogType` |
+| `Session.Logs` | POST | `/session/{sessionId}/se/log` | `{"type":"<LogType>"}` | JSON Entry 数组，解码为 `[]LogEntry` |
+
+GET 不带 body，也不发送 `Content-Type`；POST 始终发送 JSON object。Session ID
+按 Endpoint 规则作为独立路径段转义。通过本地校验后，每次调用只发送一次对应
+请求，不隐式查询 Log Types、Discovery、Healthy 或其他命令。`LogType` 是不做
+大小写、空白或别名规范化的开放字符串；空值在发送前返回
+`CodeInvalidArgument`/`DeliveryNotSent`，其他未知类型由远端决定。
+
+`LogEntry` 必须是对象并同时包含 `timestamp`、`level`、`message`：
+
+- `timestamp` 必须是可无损转换为 `int64` 的 JSON 整数，表示 Unix epoch 毫秒；
+  允许零和负值，不接受小数、`null`、超范围或其他单位；
+- `level` 和 `message` 必须是字符串，保留远端大小写和空值，不建立级别枚举；
+- 其他字段递归保存在 `LogEntry.Extra`，不解释、不丢弃，且返回值必须是独立
+  深拷贝。
+
+成功 value 必须是 JSON array；`null`、object、string 和其他类型均无效。数组
+顺序和重复项按远端保留；合法空数组返回非 nil 空 slice。响应解码是整体
+成功语义：任一 Entry 或未知字段不符合 JSON/字段契约时返回
+`CodeResponseInvalid`/`DeliveryAcknowledged`，不返回部分结果。
+
+两个命令使用独立 `Limits.MaxLogResponseBytes`（DP-081 默认 32 MiB）限制完整
+HTTP 响应体；超限返回 `CodeResponseTooLarge`/`DeliveryAcknowledged`，不截断。
+该限制按调用计算，不是 Entry 数量或 Session 累积配额。客户端不缓存 Log Types、
+Entry 或游标，不假设读取会清空 Driver 缓存，不自动轮询、分页、合并、过滤、去重
+或重试；Driver 的消费结果需在具体兼容性组合中另行记录。当前不提供
+`LogsTo(io.Writer)`、JSONL 或其他 Writer 交付形式。完整公共类型和取舍见
+`docs/design.md` §10.1。
+
 ## Session Screenshot
 
 `Session.Screenshot` 和 `Session.ScreenshotTo` 使用同一条 W3C Screenshot

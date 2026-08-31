@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-071`（已完成；下一项需显式选择）
+> 当前计划项：`DP-080`（已完成；下一项需显式选择）
 > 最后更新：2026-08-31
 
 ## Agent 执行约束
@@ -31,7 +31,7 @@
 | 9 | `DP-061` ViewportRect 实现 | `VIS-006` | Done | DP-060 |
 | 10 | `DP-070` 通用显式等待 | `WAIT-001` | Done | — |
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Done | DP-070 |
-| 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Queued | — |
+| 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Done | — |
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Queued | DP-080 |
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Queued | — |
 | 15 | `DP-091` Context API 实现 | `CTX-001` | Queued | DP-090 |
@@ -196,6 +196,15 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 - Writer 形式是否有实际价值。
 
 排除 Streaming Logs 和 BiDi。
+
+已完成 Pull Logs 设计：根包使用开放的 `LogType`，通过 Appium 3 精确的
+`/session/{id}/se/log/types` 和 `/session/{id}/se/log` 路由提供一次性读取；
+`LogEntry` 严格要求 Unix epoch 毫秒 `int64`、`level` 和 `message`，未知字段
+递归保存在独立 `Extra` 中并保持 Entry 顺序。DP-081 将增加独立的
+`MaxLogResponseBytes`（默认 32 MiB），超限或任一条目格式错误都不返回部分结果。
+设计不假设 Driver 读取会清空或保留缓存，不做本地缓存、游标、轮询、合并、去重、
+自动重试或 Runtime Discovery 门禁；结构化集合不增加 `Writer`/JSONL 交付形式。
+真实 Driver 消费语义和版本组合仍需在兼容性验证中单独记录。
 
 ### DP-081 Pull Logs 实现
 

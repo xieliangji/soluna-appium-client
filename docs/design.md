@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-08-30
+> 最后更新：2026-08-31
 
 ## 1. 文档职责
 
@@ -498,9 +498,143 @@ Base64 解码、context 结束或 Writer 写入失败时，Writer 可能已经�
 
 ### 10.1 Pull Logs
 
-Pull Logs 由 Session 主动请求一批日志。根包使用开放日志类型，不维护所有 Driver 的固定枚举。
+Pull Logs 是 Session 主动发起的一次性批量读取。它通过 Appium 3 的标准
+Selenium 日志路由取得当前 Driver 返回的快照，不是客户端自己的 Observer 日志，
+也不是持续事件流。所有请求都进入根包统一 HTTP 执行链；平台包不创建独立
+Client、Session 或 HTTP 通道。
 
-公共 API 只报告远端返回的数据，不假设读取是否清空远端缓存。消费语义必须在命令文档和兼容性验证中记录。
+#### 10.1.1 公共类型和入口
+
+DP-081 实现以下根包类型和 Session 方法：
+
+```go
+type LogType string
+
+type LogEntry struct {
+    Timestamp int64
+    Level     string
+    Message   string
+    Extra     map[string]any
+}
+
+func (s *Session) LogTypes(ctx context.Context) ([]LogType, error)
+func (s *Session) Logs(ctx context.Context, logType LogType) ([]LogEntry, error)
+```
+
+`LogType` 是 Driver/Capability 定义的开放标识符。客户端不维护固定枚举，
+不根据平台、Driver 或 Runtime Discovery 推断可用类型，不做大小写折叠、trim、
+别名转换或其他协议值规范化。`LogTypes` 返回远端原始顺序；空数组是合法的
+非 nil 空 slice，重复项也不由客户端去重。`Logs` 只拒绝空的 `LogType`，其余
+字符串（包括大小写或空白）原样放入请求；未知类型由远端返回实际错误。
+
+`LogEntry` 的三个标准字段均为必需字段：
+
+| 公共字段（Wire key） | 公共类型 | Wire 语义和边界 |
+|---|---|---|
+| `Timestamp` (`timestamp`) | `int64` | Unix epoch 毫秒；必须是有限、可无损转换为 `int64` 的 JSON 整数，允许零和负值，不截断小数或猜测其他单位 |
+| `Level` (`level`) | `string` | Driver 提供的原始级别文本；不建立固定级别枚举、不改大小写，空字符串也按远端事实保留 |
+| `Message` (`message`) | `string` | Driver 提供的原始消息；空字符串合法，不在 SDK 内拆行、解析或脱敏 |
+
+选择 `int64` 而不是 `time.Time` 是为了保留协议的原始毫秒事实。该字段没有
+时区信息，调用方如需时间对象可显式使用
+`time.UnixMilli(entry.Timestamp).UTC()`；SDK 不在解码时引入本地时区、纳秒
+精度或时钟校正。超出 `int64` 范围、非整数、`null`、非有限值或其他 JSON
+类型都属于响应格式错误。
+
+`Extra` 保存 Entry 中除 `timestamp`、`level`、`message` 之外的未知字段。未知
+字段的名称和值按 JSON 结构递归保留，不参与过滤、排序、合并或业务解释；未知
+对象、数组和 `null` 均可保留。没有未知字段时 `Extra` 为 nil。实现必须对
+`Extra` 以及其中的 map/slice 建立独立副本，调用方修改一个返回快照不能影响
+同一次读取的其他 Entry 或后续调用。未知字段不能替代缺失的标准字段；未知
+字段的数字应使用 `json.Number` 或等价的无损表示，不能静默转换为精度不足的
+`float64`；非法 JSON、非法 UTF-8 或无法解码的值使整个读取失败。
+
+Entry 数组和数组内 Entry 保持远端顺序，不按时间排序、不合并、不去重。成功
+value 必须是 JSON array；`null`、object、string 和其他类型均无效。空数组是
+合法结果。解码采用整体成功语义：任一 Entry 缺字段、类型错误或数值越界时，
+整个调用返回 `CodeResponseInvalid`/`DeliveryAcknowledged`，不返回已经解码的
+部分 slice。
+
+#### 10.1.2 HTTP 契约和资源边界
+
+Appium 3 的标准路由和成功值如下；`/se/` 是路由的一部分，不回退到历史或
+Driver 专用的 `/log` 别名：
+
+| API | HTTP | 路径 | 请求体 | 成功 value |
+|---|---|---|---|---|
+| `Session.LogTypes` | GET | `/session/{sessionId}/se/log/types` | 无 | JSON string 数组 |
+| `Session.Logs` | POST | `/session/{sessionId}/se/log` | `{"type":"<LogType>"}` | JSON `LogEntry` 数组 |
+
+Session ID 按统一 Endpoint 规则作为独立路径段转义。GET 不带 body，也不发送
+`Content-Type`；POST 始终发送包含 `type` 的 JSON object。通过本地校验后，每次
+方法调用只发起一次对应 HTTP 请求，不隐式调用 `LogTypes`、Discovery、`Healthy`
+或其他命令。
+
+Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别。DP-081 将为其增加
+默认值 `32 << 20`（32 MiB）；字段为零时采用该默认值，负数配置无效。该上限
+按单次调用应用于完整 HTTP 响应体（包括 envelope），在传输读取边界执行；响应
+超过上限时整体返回 `CodeResponseTooLarge`/`DeliveryAcknowledged`，不截断并且
+不返回部分 Entry。`LogTypes` 和 `Logs` 都使用这一上限；它是每次读取的上限，
+不是 Session 累积配额，也不等价于 Entry 数量上限。解码、未知字段复制和结果
+构造过程仍需持续检查调用方 context。
+
+调用方 context 在发送前结束、空 LogType 或其他本地参数/请求构造失败时，沿用
+统一的 `CodeInvalidArgument` 或 context 错误与 `DeliveryNotSent` 语义；已尝试
+请求但没有响应时是 `DeliveryUnknown`；收到响应后无论远端错误、格式错误还是
+超限均是 `DeliveryAcknowledged`。Pull Logs 不新增专用错误码，不因读取看起来
+只读而自动重试。
+
+#### 10.1.3 Driver 的消费和缓存语义
+
+客户端不维护 Log Type、Entry、时间戳或远端缓存的本地副本，也不保存上次读取
+位置、游标或水位。每次 `Logs` 调用只报告这一次远端响应；连续调用可能得到
+空集合、相同 Entry、仅新增 Entry、重叠 Entry 或 Driver 定义的其他结果，均不
+由 SDK 重新解释。Appium Driver 的 log getter 可以排空、截断、重置或保留其
+缓存，但这些行为是 Driver-specific 事实而不是公共 API 保证；读取是否消费
+缓存必须在具体 Driver/版本/设备组合的 `docs/compatibility.md` 记录。
+
+因此 SDK 不做以下事情：
+
+- 不把“读取成功”解释为“远端缓存已清空”；
+- 不在 `DeliveryUnknown` 后重放读取，避免重复消费或改变 Driver 缓存状态；
+- 不自动轮询、分页、合并、按时间过滤、去重或补齐缺失 Entry；
+- 不因 Log Type 曾经出现在 `LogTypes` 中就对后续 `Logs` 调用做本地门禁。
+
+同一 Session 的并发 Pull Logs 不由 SDK 串行化；调用方需要稳定顺序或可审计的
+消费点时，必须在上层自行调度并保存读取时间、Log Type 和返回快照。
+
+#### 10.1.4 Writer 形式的取舍
+
+当前不提供 `LogsTo(io.Writer)` 或写入 JSONL 的变体。Pull Logs 的公共结果是
+经过校验的结构化 Entry 集合，不是二进制产物：
+
+1. 要保证标准字段、时间范围和未知字段完整性，解码必须在交付前完成整体校验；
+2. 直接把原始 JSON 写入 Writer 会暴露未定义的序列化/Raw Command 契约，并可能
+   在发现后续 Entry 非法时留下无法标识为成功的部分输出；
+3. 把结果重新编码为 JSON array 或 JSONL 会引入新的字段、时间和错误格式，不能
+   仅视为传输层优化；
+4. `MaxLogResponseBytes` 已为当前批量读取限定响应和结果规模，调用方可以在
+   收到 `[]LogEntry` 后按自己的持久化格式写入 Writer。
+
+若未来确有低峰值内存或逐条背压需求，应另行设计带明确交付格式和进度/错误
+语义的迭代器或流；不得把它偷偷扩展为本能力的 Writer 或 Streaming Logs。
+
+#### 10.1.5 DP-081 实现和验证输入
+
+DP-081 需要在根包 `logs.go` 中复用统一命令链，覆盖：
+
+- 精确的 `/se/log/types` 与 `/se/log` 方法、路径、请求体和 Content-Type；
+- 开放 Log Type、空值本地拒绝、远端未知类型错误和每次只发一个请求；
+- 空数组、顺序/重复项、标准字段、Unix 毫秒边界和未知字段深拷贝；
+- 缺失/null/错误类型/小数/越界时间戳、非法 Entry 和整体无部分结果；
+- `MaxLogResponseBytes` 的零值默认、负数配置、边界超限和 Delivery；
+- context 取消、传输/远端错误以及不自动重试、不缓存、不轮询、不合并、不去重。
+
+真实 Driver 的缓存消费、支持的 Log Type 和 Host/版本组合仍需单独验证并登记；
+协议测试通过不会把 `LOG-001/002` 标成 `Verified`。
+
+本设计明确排除 Streaming Logs、`/appium/events` 事件历史、BiDi、平台专用日志
+包装、Host 工具采集、Raw Command API 和 Writer/JSONL 交付。
 
 ### 10.2 Streaming Logs 与监控流
 
@@ -704,7 +838,6 @@ internal/bidi       BiDi 协议实现
 
 - Web Context 下 Element 查找、Rect 和可操作性几何；
 - WebDriver BiDi 公共订阅接口及背压模型；
-- Pull Log 的公共 Entry 类型与时间字段；
 - Streaming Log 与平台监控事件的公共/平台类型边界；
 - Runtime Discovery Catalog 的稳定 Go 类型。
 
@@ -741,6 +874,7 @@ internal/bidi       BiDi 协议实现
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
 | AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
 | AD-025 | Accepted | ViewportRect 使用独立的 Driver 像素几何 `PixelRect`；该类型不绑定具体 Screenshot buffer，Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver、Driver pixel geometry 与具体图像平面混用，并把 Screenshot 裁剪关系留给显式兼容性验证 |
+| AD-026 | Accepted | Pull Logs 使用开放 `LogType` 和严格标准 `LogEntry`；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留 Driver 原始日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

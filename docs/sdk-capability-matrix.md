@@ -176,8 +176,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| LOG-001 | 查询 Log Types | Session method | Accepted | Appium `/log/types` | 类型由 Driver/Capability 决定 | None | 新增 `logs.go` |
-| LOG-002 | 按类型 Pull Logs | Session method | Accepted | Appium `/log` | 读取是否清空由 Driver 语义决定 | None | 增加 `MaxLogResponseBytes` |
+| LOG-001 | `Session.LogTypes` 查询 Log Types | Session method | Accepted | Appium 3 `/session/{id}/se/log/types` | 类型由 Driver/Capability 决定；开放字符串，不做本地枚举或规范化 | None | DP-080 已固定开放 `LogType`、顺序/空集合和严格响应边界；DP-081 实现 `logs.go`；命令契约见 `docs/command-semantics.md` |
+| LOG-002 | `Session.Logs` 按类型 Pull Logs | Session method | Accepted | Appium 3 `/session/{id}/se/log` | 单次有界结构化读取；消费是否清空由 Driver 语义决定；不缓存、不自动重试或去重 | None | DP-080 已固定 `LogEntry`/Unix 毫秒/`Extra` 与 Writer 取舍；DP-081 增加 `MaxLogResponseBytes` 并实现；命令契约见 `docs/command-semantics.md` |
 | BIDI-001 | 通用 WebDriver BiDi 连接与命令关联 | Session stream | Architecture | WebSocket / BiDi | Appium/Driver 必须返回可用 Endpoint | None | 先设计 `internal/bidi` |
 | BIDI-002 | 有界订阅、取消、背压和关闭 | Session stream | Architecture | BiDi Event Stream | 不自动重连 | None | 增加协议测试基础设施 |
 | LOG-003 | 通用 Streaming Logs | Session stream | Architecture | WebDriver BiDi | 依赖 BIDI-001/002 | None | 与平台日志事件分层 |

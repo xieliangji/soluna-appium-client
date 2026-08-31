@@ -53,6 +53,22 @@ Element Screenshot 收到远端 `stale element reference`（映射为
 `CodeElementStale`）或其他 W3C 命令错误时，沿用统一远端错误映射和 Delivery
 语义；客户端不会自动重新定位或重试。
 
+## Pull Logs 响应错误
+
+`Session.LogTypes` 和 `Session.Logs` 的成功 value 必须分别是 JSON string 数组
+和 `LogEntry` 数组。顶层 `null`、错误类型、非字符串 Log Type、缺失或类型错误
+的 Entry 标准字段、非法 JSON、非法 UTF-8、时间戳非整数或超出 `int64` 范围时，
+返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`，且不返回部分结果。
+未知 Entry 字段按 `docs/design.md` 的递归 `Extra` 规则保留；无法保留的值同样
+按响应格式错误处理。
+
+`Logs` 的空 `LogType` 是发送前的本地参数错误，返回 `CodeInvalidArgument`、
+Delivery 为 `DeliveryNotSent`，不会发送远端请求。两种读取都使用独立的
+`Limits.MaxLogResponseBytes`；完整 HTTP 响应体超过配置上限时返回
+`CodeResponseTooLarge`，Delivery 为 `DeliveryAcknowledged`，不截断或交付部分
+Entry。远端日志错误、传输错误和 context 取消继续沿用统一命令投递语义；客户端
+不因读取看起来只读而自动重试、缓存或假设 Driver 已消费日志。
+
 ## 通用显式等待错误
 
 `wait.Until` 不拥有独立的远端命令，因此不会生成或修改 Delivery 状态。条件
