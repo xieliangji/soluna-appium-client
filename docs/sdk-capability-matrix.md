@@ -176,8 +176,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| LOG-001 | `Session.LogTypes` 查询 Log Types | Session method | Implemented | Appium 3 `/session/{id}/se/log/types` | 每次远端读取的动态快照；集合可能受 Driver、Capability、当前 Context 和其他 Session 状态影响；开放字符串（包括空字符串），不做本地枚举或规范化 | Protocol | `logs.go`, `logs_test.go`, `docs/command-semantics.md`；严格校验数组元素与动态快照语义 |
-| LOG-002 | `Session.Logs` 按类型 Pull Logs | Session method | Implemented | Appium 3 `/session/{id}/se/log` | 单次有界结构化读取；`LogType`（包括空字符串）不在本地拒绝，由远端决定；消费是否清空由 Driver 语义决定；不缓存、不自动重试或去重 | Protocol | `logs.go`, `logs_test.go`, `limits.go`, `client.go`, `docs/command-semantics.md`；严格 Entry/Extra 解码与独立响应上限 |
+| LOG-001 | `Session.LogTypes` 查询 Log Types | Session method | Implemented | Appium 3 `/session/{id}/se/log/types` | 每次远端读取的动态快照；集合可能受 Driver、Capability、当前 Context 和其他 Session 状态影响；合法 UTF-8 开放字符串（包括空字符串），不做本地枚举或规范化 | Protocol | `logs.go`, `logs_test.go`, `docs/command-semantics.md`；严格校验数组元素与动态快照语义 |
+| LOG-002 | `Session.Logs` 按类型 Pull Logs | Session method | Implemented | Appium 3 `/session/{id}/se/log` | 单次有界结构化读取；合法 UTF-8 `LogType`（包括空字符串）不按业务内容本地拒绝，由远端决定；非法 UTF-8 在发送前返回参数错误；消费是否清空由 Driver 语义决定；不缓存、不自动重试或去重 | Protocol | `logs.go`, `logs_test.go`, `limits.go`, `client.go`, `docs/command-semantics.md`；严格 Entry/Extra 解码与独立响应上限 |
 | BIDI-001 | 通用 WebDriver BiDi 连接与命令关联 | Session stream | Architecture | WebSocket / BiDi | Appium/Driver 必须返回可用 Endpoint | None | 先设计 `internal/bidi` |
 | BIDI-002 | 有界订阅、取消、背压和关闭 | Session stream | Architecture | BiDi Event Stream | 不自动重连 | None | 增加协议测试基础设施 |
 | LOG-003 | 通用 Streaming Logs | Session stream | Architecture | WebDriver BiDi | 依赖 BIDI-001/002 | None | 与平台日志事件分层 |

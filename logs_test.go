@@ -229,6 +229,26 @@ func TestLocalDP081PullLogsCanceledBeforeDelivery(t *testing.T) {
 	}
 }
 
+func TestLocalDP081PullLogsRejectsInvalidUTF8LogTypeBeforeDelivery(t *testing.T) {
+	session, recorder := newLocalDP081LogsTestSession(t, `{"value":[]}`, appium.ClientOptions{})
+	recorder.Reset()
+
+	invalidLogType := appium.LogType(string([]byte{0xff}))
+	entries, err := session.Logs(context.Background(), invalidLogType)
+	if entries != nil {
+		t.Fatalf("invalid UTF-8 log type must not return entries: %#v", entries)
+	}
+	if err == nil || !appium.IsErrorCode(err, appium.CodeInvalidArgument) {
+		t.Fatalf("expected invalid argument error, got %v", err)
+	}
+	if appium.DeliveryOf(err) != appium.DeliveryNotSent {
+		t.Fatalf("unexpected delivery: %q", appium.DeliveryOf(err))
+	}
+	if requests := recorder.Requests(); len(requests) != 0 {
+		t.Fatalf("invalid UTF-8 log type must not be delivered: %d requests", len(requests))
+	}
+}
+
 func TestLocalDP081PullLogsRejectsInvalidUTF8(t *testing.T) {
 	response := `{"value":[{"timestamp":1,"level":"INFO","message":"m","extra":"` +
 		string([]byte{0xff}) +

@@ -548,18 +548,20 @@ func (s *Session) Logs(ctx context.Context, logType LogType) ([]LogEntry, error)
 `LogType` 是开放的 Go `string` 标识符。可用集合是每次远端读取的动态快照，
 可能受 Driver、Capabilities、当前 Context 以及其他 Session 状态影响；客户端不
 把它固化为由 Driver 或 Capability 单独决定的稳定枚举。`LogTypes` 返回远端原始
-顺序，数组中的每个 string（包括空字符串）都必须原样保留；空数组是合法的非 nil
-空 slice，重复项也不由客户端去重。客户端不根据平台或 Runtime Discovery 推断
-可用类型，不做大小写折叠、trim、别名转换或其他协议值规范化。`Logs` 对
-`LogType` 的内容不做本地拒绝，所有字符串（包括空字符串、大小写或空白）原样放入
-`type` 请求字段；未知类型或空字符串是否支持由远端决定。
+顺序，数组中的每个合法 UTF-8 string（包括空字符串）都必须原样保留；空数组是
+合法的非 nil 空 slice，重复项也不由客户端去重。客户端不根据平台或 Runtime
+Discovery 推断可用类型，不做大小写折叠、trim、别名转换或其他协议值规范化。`Logs`
+对合法 UTF-8 `LogType` 的内容不做本地业务拒绝，所有此类字符串（包括空字符串、
+大小写或空白）原样放入 `type` 请求字段；未知类型或空字符串是否支持由远端决定。
+Go string 中的非法 UTF-8 无法无损编码为 JSON string，因此在发送前返回
+`CodeInvalidArgument`/`DeliveryNotSent`，而不是静默替换字符。
 
 例如同一 Driver 在 Native 与 Web Context 下可能返回不同的 Log Type 集合，或
 根据 Session 内其他状态改变 getter 的结果；这类差异由远端快照表达，SDK 不合并、
 补齐或提前推断。
 
-该开放值域是读写入口之间的共同不变量：`LogTypes` 返回的任一值（包括空字符串）
-都可以不经修改直接传给 `Logs`，SDK 不制造额外的本地拒绝条件。
+该开放值域是读写入口之间的共同不变量：`LogTypes` 返回的任一合法 UTF-8 值（包括
+空字符串）都可以不经修改直接传给 `Logs`，SDK 不制造业务白名单或格式之外的本地拒绝条件。
 
 `LogEntry` 的三个标准字段均为必需字段：
 
@@ -635,7 +637,8 @@ Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别，默认值�
 - 不在 `DeliveryUnknown` 后重放读取，避免重复消费或改变 Driver 缓存状态；
 - 不自动轮询、分页、合并、按时间过滤、去重或补齐缺失 Entry；
 - 不因 Log Type 曾经出现在 `LogTypes` 中就对后续 `Logs` 调用做本地门禁；也不因
-  LogType 为空而在本地拒绝。
+  LogType 为空而在本地拒绝。只有无法无损编码为 JSON string 的非法 UTF-8 值会在
+  发送前被拒绝。
 
 同一 Session 的并发 Pull Logs 不由 SDK 串行化；调用方需要稳定顺序或可审计的
 消费点时，必须在上层自行调度并保存读取时间、Log Type 和返回快照。
@@ -661,7 +664,7 @@ Pull Logs 使用独立的 `Limits.MaxLogResponseBytes` 资源类别，默认值�
 DP-081 已在根包 `logs.go` 中复用统一命令链，覆盖：
 
 - 精确的 `/se/log/types` 与 `/se/log` 方法、路径、请求体和 Content-Type；
-- 开放 Log Type（包括空字符串透传）、远端对未知类型或空字符串的实际结果和每次只发一个请求；
+- 合法 UTF-8 的开放 Log Type（包括空字符串透传）、远端对未知类型或空字符串的实际结果和每次只发一个请求；非法 UTF-8 在发送前按本地参数错误拒绝；
 - 空数组、顺序/重复项、标准字段、Unix 毫秒边界和未知字段深拷贝；
 - 缺失/null/错误类型/小数/越界时间戳、非法 Entry 和整体无部分结果；
 - `MaxLogResponseBytes` 的零值默认、负数配置、边界超限和 Delivery；
@@ -918,7 +921,7 @@ internal/bidi       BiDi 协议实现
 | AD-023 | Accepted | 架构文档只描述高层当前结构；详细规则和决策索引维护在设计文档 | 降低架构文档噪声并保持职责稳定 |
 | AD-024 | Accepted | Runtime Discovery 按 Source provenance 与协议 execution identity 建模；未知字段递归保留，Supports 按 HTTP/BiDi/Execute Method 分开精确匹配 | 保留 Appium/Driver/Plugin 层级与真实命令身份，避免目录查询产生隐式能力推断 |
 | AD-025 | Accepted | ViewportRect 使用独立的 Driver 像素几何 `PixelRect`；该类型不绑定具体 Screenshot buffer，Driver-specific 的 orientation、status bar、scale 只作为事实，不执行隐式转换，也不改变 Native Find/Tap | 防止 WebDriver、Driver pixel geometry 与具体图像平面混用，并把 Screenshot 裁剪关系留给显式兼容性验证 |
-| AD-026 | Accepted | Pull Logs 使用完全开放透传的 `LogType`（包括空字符串）和严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
+| AD-026 | Accepted | Pull Logs 对合法 UTF-8 `LogType` 使用完全开放透传（包括空字符串），非法 UTF-8 在 JSON 编码前拒绝；并使用严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
 | AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
 

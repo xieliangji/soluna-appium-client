@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"unicode/utf8"
 
 	"github.com/xieliangji/soluna-appium-client/internal/codec"
 	"github.com/xieliangji/soluna-appium-client/internal/wire"
@@ -22,7 +23,8 @@ const (
 
 // LogType 表示由当前远端 Driver 提供的开放日志类型标识符。
 //
-// 客户端不维护日志类型枚举，也不会对值执行大小写、空白或别名规范化。
+// 客户端不维护日志类型枚举，也不会对合法 UTF-8 值执行大小写、空白或别名规范化。
+// 非法 UTF-8 值无法无损编码为 JSON string，作为 Logs 参数时会在发送前被拒绝。
 type LogType string
 
 // LogEntry 表示一次 Pull Logs 调用返回的日志条目。
@@ -97,8 +99,9 @@ func (s *Session) LogTypes(
 
 // Logs 按指定的开放日志类型读取当前 Session 的一次性日志快照。
 //
-// logType 会原样放入请求体，包括空字符串、大小写和空白；是否支持该值由
-// 远端 Driver 决定。每次调用只发送一个请求，不缓存、轮询、合并、去重或重试。
+// 合法 UTF-8 的 logType 会原样放入请求体，包括空字符串、大小写和空白；是否支持
+// 该值由远端 Driver 决定。非法 UTF-8 无法无损编码为 JSON string，会在发送前返回
+// CodeInvalidArgument。每次调用只发送一个请求，不缓存、轮询、合并、去重或重试。
 func (s *Session) Logs(
 	ctx context.Context,
 	logType LogType,
@@ -106,6 +109,15 @@ func (s *Session) Logs(
 	client, err := s.commandClient(getLogsOperation)
 	if err != nil {
 		return nil, err
+	}
+
+	if !utf8.ValidString(string(logType)) {
+		return nil, &Error{
+			Code:      CodeInvalidArgument,
+			Operation: getLogsOperation,
+			Message:   "log type must be valid UTF-8",
+			Delivery:  DeliveryNotSent,
+		}
 	}
 
 	command, err := wire.NewCommand(

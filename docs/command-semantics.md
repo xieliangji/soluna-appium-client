@@ -78,11 +78,12 @@ GET 不带 body，也不发送 `Content-Type`；POST 始终发送 JSON object。
 按 Endpoint 规则作为独立路径段转义。通过本地校验后，每次调用只发送一次对应
 请求，不隐式查询 Log Types、Discovery、Healthy 或其他命令。`LogTypes` 的数组
 元素必须都是 JSON string（空字符串也合法）。`LogType` 是不做大小写、空白或
-别名规范化的开放字符串；`Logs` 将其原样放入 `type` 字段，包括空字符串，不在
-本地按内容拒绝，其他未知类型由远端决定。可用 Log Type 集合是每次读取的动态
-快照，可能随 Driver、Capabilities、当前 Context 或其他 Session 状态变化。
-因此 `LogTypes` 返回的任一值（包括空字符串）都可以不经修改直接作为 `Logs`
-参数，SDK 不制造读取与按类型读取之间的值域不对称。
+别名规范化的开放字符串；对合法 UTF-8 值，`Logs` 将其原样放入 `type` 字段，包括
+空字符串，不按业务内容本地拒绝，其他未知类型由远端决定。非法 UTF-8 无法无损
+编码为 JSON string，在发送前返回 `CodeInvalidArgument`/`DeliveryNotSent`。可用 Log Type
+集合是每次读取的动态快照，可能随 Driver、Capabilities、当前 Context 或其他 Session
+状态变化。因此 `LogTypes` 返回的任一合法 UTF-8 值（包括空字符串）都可以不经修改
+直接作为 `Logs` 参数，SDK 不制造读取与按类型读取之间的值域不对称。
 
 `LogEntry` 必须是对象并同时包含 `timestamp`、`level`、`message`：
 

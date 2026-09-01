@@ -214,8 +214,9 @@ amplification 先通过基线数据评估，不在没有测量证据时替换查
 
 已完成 Pull Logs 设计：根包使用开放的 `LogType`，通过 Appium 3 精确的
 `/session/{id}/se/log/types` 和 `/session/{id}/se/log` 路由提供一次性读取；
-`LogType` 包括空字符串也原样透传，可用集合是可能随 Driver、Capability、当前
-Context 和其他 Session 状态变化的动态快照；`LogEntry` 严格要求 Unix epoch 毫秒
+合法 UTF-8 的 `LogType` 包括空字符串也原样透传；非法 UTF-8 无法无损编码为 JSON
+string，在发送前按 `CodeInvalidArgument`/`DeliveryNotSent` 拒绝。可用集合是可能随
+Driver、Capability、当前 Context 和其他 Session 状态变化的动态快照；`LogEntry` 严格要求 Unix epoch 毫秒
 `int64`、`level` 和 `message`，未知字段递归保存在独立 `Extra` 中并保持 Entry 顺序。
 DP-081 已增加独立的
 `MaxLogResponseBytes`（默认 32 MiB），超限或任一条目格式错误都不返回部分结果。
@@ -225,13 +226,13 @@ DP-081 已增加独立的
 
 ### DP-081 Pull Logs 实现
 
-- 实现 Log Types 和按类型读取（包括空 `LogType` 的透传，由远端决定是否支持）。
+- 实现 Log Types 和按类型读取（包括空及其他合法 UTF-8 `LogType` 的透传，由远端决定是否支持；非法 UTF-8 在发送前拒绝）。
 - 增加 `MaxLogResponseBytes`。
 - 严格解码集合和条目，不假设读取会清空缓存。
 - 排除自动轮询、合并、去重和持续订阅。
 
 已完成根包 Pull Logs 实现和协议回归测试：通过统一 HTTP 执行链发送精确的
-`/se/log/types` 与 `/se/log` 请求，完整保留开放 Log Type、Entry 顺序、未知字段
+`/se/log/types` 与 `/se/log` 请求，完整保留合法 UTF-8 的开放 Log Type、Entry 顺序、未知字段
 及 `json.Number` 数字值，并执行标准字段、时间戳、UTF-8/surrogate 和整体成功校验。
 `MaxLogResponseBytes` 使用 32 MiB 默认值并在完整 HTTP 响应边界生效；错误和
 Delivery 继续沿用统一命令语义。实现不缓存、不轮询、不合并、不去重或重试，真实
