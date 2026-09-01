@@ -1,4 +1,4 @@
-package soluna_appium_client_test
+package appium_test
 
 import (
 	"context"
@@ -82,6 +82,41 @@ func TestTouchActionsProtocol(t *testing.T) {
 		)
 	}
 
+	// TouchAction 的零值必须被识别为无效动作，不能静默编码成
+	// pointerMove(0, 0) 这种具有副作用的操作。
+	recorder.Reset()
+
+	err = session.PerformActions(
+		context.Background(),
+		appium.TouchSequence(
+			"finger",
+			appium.TouchAction{},
+		),
+	)
+	if err == nil {
+		t.Fatal("expected zero TouchAction to be rejected")
+	}
+
+	if !appium.IsErrorCode(err, appium.CodeInvalidArgument) {
+		t.Fatalf("unexpected zero TouchAction error: %v", err)
+	}
+
+	if delivery := appium.DeliveryOf(err); delivery != appium.DeliveryNotSent {
+		t.Fatalf(
+			"zero TouchAction must not be delivered: got %q",
+			delivery,
+		)
+	}
+
+	if requests := recorder.Requests(); len(requests) != 0 {
+		t.Fatalf(
+			"zero TouchAction must not reach remote: got %d requests",
+			len(requests),
+		)
+	}
+
+	recorder.Reset()
+
 	if err := session.Tap(
 		context.Background(),
 		appium.Point{
@@ -137,14 +172,14 @@ func TestTouchActionsProtocol(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 5 {
+	if len(requests) != 4 {
 		t.Fatalf(
-			"unexpected request count: expected 5, got %d",
+			"unexpected request count: expected 4, got %d",
 			len(requests),
 		)
 	}
 
-	tapRequest := requests[1]
+	tapRequest := requests[0]
 
 	if err := contracttest.MatchMethod(
 		tapRequest,
@@ -194,7 +229,7 @@ func TestTouchActionsProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	longPressRequest := requests[2]
+	longPressRequest := requests[1]
 
 	if err := contracttest.MatchRequestURI(
 		longPressRequest,
@@ -241,7 +276,7 @@ func TestTouchActionsProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	swipeRequest := requests[3]
+	swipeRequest := requests[2]
 
 	if err := contracttest.MatchRequestURI(
 		swipeRequest,
@@ -291,7 +326,7 @@ func TestTouchActionsProtocol(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	releaseRequest := requests[4]
+	releaseRequest := requests[3]
 
 	if err := contracttest.MatchMethod(
 		releaseRequest,

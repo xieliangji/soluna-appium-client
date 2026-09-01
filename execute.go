@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 import (
 	"context"
@@ -21,7 +21,10 @@ const truncatedRemoteDataJSON = `{"truncated":true}`
 // decoder 应在处理较大响应时检查 context 状态。
 type responseDecoder func(context.Context, json.RawMessage) error
 
-const executeScriptOperation = "execute_script"
+const (
+	executeScriptOperation             = "execute_script"
+	maxExecuteScriptOperationByteCount = 64
+)
 
 // ExecuteScript 在当前 Session 中执行同步 WebDriver Script。
 //
@@ -34,20 +37,92 @@ func (s *Session) ExecuteScript(
 	script string,
 	arguments []any,
 ) (json.RawMessage, error) {
-	client, err := s.commandClient(
+	return s.executeScriptWithOperation(
+		ctx,
 		executeScriptOperation,
+		script,
+		arguments,
 	)
-	if err != nil {
+}
+
+// ExecuteScriptWithOperation 通过统一命令链执行一次同步 Execute Script。
+//
+// operation 是调用方提供的低基数诊断 identity，只用于本地 Error 和 Observer，
+// 不会发送给远端；远端请求始终使用 W3C Execute Script 的固定路由和请求格式。
+// 该方法是高级 Execute Script 入口，适合平台扩展或需要稳定观测名称的调用方；
+// 普通调用方不需要独立 identity 时应使用 ExecuteScript。
+//
+// operation 必须匹配 ASCII 格式 `[a-z][a-z0-9_]{0,63}`。客户端不会根据它构造
+// HTTP Method、Route、脚本或参数，也不会因此增加重试、fallback 或其他策略；
+// 调用方负责在业务上保持 identity 集合低基数且稳定。
+func (s *Session) ExecuteScriptWithOperation(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+) (json.RawMessage, error) {
+	if err := validateExecuteScriptOperation(operation); err != nil {
 		return nil, err
 	}
 
+	return s.executeScriptWithOperation(
+		ctx,
+		operation,
+		script,
+		arguments,
+	)
+}
+
+// ExecuteScriptWithOperationAndDecode 通过统一命令链执行一次同步 Execute Script，
+// 并在命令完成前解码远端返回的 value。
+//
+// operation 是调用方提供的低基数 ASCII 诊断 identity，格式必须匹配
+// `[a-z][a-z0-9_]{0,63}`。decoder 接收 W3C response envelope 中的 value，
+// 在 Observer 的 OnCommandFinished 之前同步执行；decoder 返回的错误会进入
+// 统一的响应解码错误映射，因此会保留 HTTP StatusCode、Delivery 和 operation。
+// 该方法仍然只发送固定的 W3C Execute Script 路由，不是任意 Method/Route 的
+// Raw Command API。调用方负责在业务上保持 operation 集合低基数且稳定；decoder
+// 为 nil 或 operation 无效时不会发送远端请求。
+func (s *Session) ExecuteScriptWithOperationAndDecode(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+	decoder func(context.Context, json.RawMessage) error,
+) error {
+	if err := validateExecuteScriptOperation(operation); err != nil {
+		return err
+	}
+	if decoder == nil {
+		return &Error{
+			Code:      CodeInvalidArgument,
+			Operation: operation,
+			Message:   "execute script response decoder is nil",
+			Delivery:  DeliveryNotSent,
+		}
+	}
+
+	return s.executeScriptWithOperationDecoder(
+		ctx,
+		operation,
+		script,
+		arguments,
+		responseDecoder(decoder),
+	)
+}
+
+// executeScriptWithOperation 在指定的本地 operation identity 下执行同步脚本。
+func (s *Session) executeScriptWithOperation(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+) (json.RawMessage, error) {
 	var result json.RawMessage
 
-	err = executeScriptCommand(
+	err := s.executeScriptWithOperationDecoder(
 		ctx,
-		client,
-		executeScriptOperation,
-		s.id,
+		operation,
 		script,
 		arguments,
 		func(
@@ -71,6 +146,69 @@ func (s *Session) ExecuteScript(
 	}
 
 	return result, nil
+}
+
+// executeScriptWithOperationDecoder 在指定的本地 operation identity 下执行同步脚本。
+func (s *Session) executeScriptWithOperationDecoder(
+	ctx context.Context,
+	operation string,
+	script string,
+	arguments []any,
+	decoder responseDecoder,
+) error {
+	client, err := s.commandClient(
+		operation,
+	)
+	if err != nil {
+		return err
+	}
+
+	return executeScriptCommand(
+		ctx,
+		client,
+		operation,
+		s.id,
+		script,
+		arguments,
+		decoder,
+	)
+}
+
+// validateExecuteScriptOperation 校验高级 Execute Script 入口使用的诊断 identity。
+func validateExecuteScriptOperation(operation string) error {
+	if len(operation) == 0 ||
+		len(operation) > maxExecuteScriptOperationByteCount {
+		return invalidExecuteScriptOperationError()
+	}
+
+	for index := 0; index < len(operation); index++ {
+		char := operation[index]
+
+		if index == 0 {
+			if char < 'a' || char > 'z' {
+				return invalidExecuteScriptOperationError()
+			}
+			continue
+		}
+
+		if (char < 'a' || char > 'z') &&
+			(char < '0' || char > '9') &&
+			char != '_' {
+			return invalidExecuteScriptOperationError()
+		}
+	}
+
+	return nil
+}
+
+// invalidExecuteScriptOperationError 返回不暴露原始 identity 的参数错误。
+func invalidExecuteScriptOperationError() error {
+	return &Error{
+		Code:      CodeInvalidArgument,
+		Operation: executeScriptOperation,
+		Message:   "execute script operation must match [a-z][a-z0-9_]{0,63}",
+		Delivery:  DeliveryNotSent,
+	}
 }
 
 // executeScriptCommand 通过统一命令链执行一次同步 Execute Script。

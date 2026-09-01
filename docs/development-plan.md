@@ -116,6 +116,10 @@ Execute Method 三类 execution identity，并固定 Source provenance、`params
 - 将 Screenshot 移入明确行为文件。
 - 排除 Element Screenshot、Viewport Screenshot 和裁剪。
 
+补充评估：当前 `MaxScreenshotResponseBytes` 同时作为完整 wire 响应和解码后
+截图数据的共同硬上限；`MaxRecordingResponseBytes` 同理。该保守资源策略暂不
+拆分为两个公共字段，只有独立 decoded 配额成为明确需求时再单独设计迁移规则。
+
 ### DP-051 Element Screenshot
 
 - 实现 `Element.Screenshot`、`Element.ScreenshotTo`。
@@ -157,6 +161,14 @@ Screenshot 的 crop rectangle 属于带环境、Context 和采集路径条件的
 四个整数像素字段执行原点、正面积和端点溢出校验。结果不缓存、不参与现有
 Find/Tap，也不建立 Screenshot 像素平面关联。
 
+补充优化（不改变计划队列）：根包增加固定路由的高级
+`Session.ExecuteScriptWithOperation` 与
+`Session.ExecuteScriptWithOperationAndDecode` 入口，允许平台扩展保留独立的本地
+operation identity，并让 typed value decoder 在统一执行链的 decoder slot 中完成，
+使响应格式错误的 Error 与 Observer Finished 保持相同的 StatusCode、Delivery 和
+operation。operation 采用 `[a-z][a-z0-9_]{0,63}` 格式，不开放任意 Method/Route，
+也不引入 Discovery、fallback 或 retry。
+
 ### DP-070 通用显式等待
 
 - 实现最小 `wait.Until`。
@@ -184,6 +196,9 @@ Find/Tap，也不建立 Screenshot 像素平面关联。
 与此前未找到诊断一并保留；本地 finder malformed 结果返回普通本地契约错误，
 不伪造远端 Code/Delivery。Elements 仅有空集合时返回 context 结果；实现不修改
 隐式或命令超时，不自动重新定位或恢复 Element，并补充了 stub 与协议回归测试。
+
+补充评估：Find 的 Window 交集语义和单次候选快照保持不变；remote command
+amplification 先通过基线数据评估，不在没有测量证据时替换查找算法。
 
 ### DP-080 Pull Logs 设计
 
@@ -406,6 +421,12 @@ Driver 消费语义和兼容性仍未验证。
 - 审查选定范围内的导出 API、GoDoc、命名、零值和包边界。
 - 确认根包与平台包无重复能力，平台导出函数使用 `IOS` / `Android` 前缀。
 - 完成命令、错误、坐标、兼容性和发布文档。
+- 建立 `Find` / `FindElements` 的 command amplification 基线，至少记录
+  candidate count、Rect probes、首个可见候选位置和总耗时；不预设硬性能阈值，
+  也不因基线任务改变现有查找语义。
+- 对大录屏执行一次真实 memory benchmark，区分 `StopRecordingTo` 的解码后输出
+  峰值与完整 wire response 缓冲成本；没有独立配额需求或实测证据时不改变当前
+  media limit 模型。
 - 运行完整 `go test ./...`、`go test -race ./...` 和声明环境的 smoke suite。
 - 未验证组合不作稳定承诺。
 - 不为表面 API 完整加入未规划能力。

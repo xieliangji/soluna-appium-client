@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 import (
 	"context"
@@ -30,6 +30,7 @@ type ActionSequence struct {
 //
 // TouchAction 只能通过本包提供的构造函数创建，
 // 调用方不需要感知 W3C Actions 的底层字段结构。
+// TouchAction 的零值无效，传入动作序列时会返回参数错误。
 type TouchAction struct {
 	kind     touchActionKind
 	point    Point
@@ -40,7 +41,8 @@ type TouchAction struct {
 type touchActionKind uint8
 
 const (
-	touchActionMove touchActionKind = iota
+	touchActionInvalid touchActionKind = iota
+	touchActionMove
 	touchActionDown
 	touchActionUp
 	touchActionPause

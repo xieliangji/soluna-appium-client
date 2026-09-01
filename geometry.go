@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 // Point 表示 WebDriver viewport 坐标系中的一个点。
 //

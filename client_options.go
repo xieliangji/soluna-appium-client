@@ -1,4 +1,4 @@
-package soluna_appium_client
+package appium
 
 import (
 	"net/http"
@@ -43,6 +43,8 @@ type ClientOptions struct {
 
 	// Observer 接收远端命令的执行观测事件。
 	//
-	// 为 nil 时不产生观测回调。
+	// 为 nil 时不产生观测回调。回调在命令执行链中同步调用，耗时可能影响
+	// 调用方 context 和整体延迟；实现必须并发安全、快速返回且不得 panic。
+	// 客户端不会异步排队或恢复回调 panic。
 	Observer Observer
 }

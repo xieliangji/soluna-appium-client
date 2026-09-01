@@ -105,6 +105,27 @@ Entry 或游标，不假设读取会清空 Driver 缓存，不自动轮询、分
 `LogsTo(io.Writer)`、JSONL 或其他 Writer 交付形式。完整公共类型和取舍见
 `docs/design.md` §10.1。
 
+## Execute Script 与平台 operation identity
+
+`Session.ExecuteScript`、`Session.ExecuteScriptWithOperation` 和
+`Session.ExecuteScriptWithOperationAndDecode` 都发送同一个请求：
+
+```text
+POST /session/{sessionId}/execute/sync
+```
+
+后两个入口的 `operation` 只写入本地 `Error.Operation` 和 Observer 事件，不进入
+请求体，也不参与 HTTP Method、Route、Discovery、fallback 或 retry。该参数是调用方
+提供的诊断 identity，必须匹配 ASCII 格式 `[a-z][a-z0-9_]{0,63}`；无效时在本地
+返回 `CodeInvalidArgument`/`DeliveryNotSent`，不会把原始 identity 放入错误或发送
+请求；调用方仍需保持 identity 集合低基数且稳定。`ExecuteScriptWithOperation` 返回原始 `value`；
+`ExecuteScriptWithOperationAndDecode` 将调用方 decoder 放在统一命令执行链的
+response decoder 阶段，decoder 错误返回 `CodeResponseInvalid`（或相应 context/
+output 错误），并保留收到响应时的 HTTP StatusCode、`DeliveryAcknowledged`、
+operation 以及 Observer `Finished.ErrorCode`。这两个入口都不是任意 Method/Route 的
+Raw Command API。普通调用方无需区分 identity 时继续使用 `ExecuteScript`；平台强
+类型 Execute Method 应使用带 decoder 的入口。
+
 ## Session Screenshot
 
 `Session.Screenshot` 和 `Session.ScreenshotTo` 使用同一条 W3C Screenshot

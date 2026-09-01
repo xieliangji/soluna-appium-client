@@ -1,4 +1,4 @@
-package soluna_appium_client_test
+package appium_test
 
 import (
 	"bytes"

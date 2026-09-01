@@ -1,4 +1,4 @@
-package soluna_appium_client_test
+package appium_test
 
 import (
 	"context"
@@ -157,6 +157,90 @@ func TestObserverLifecycleIncludesResponseDecodeFailure(t *testing.T) {
 			"finished duration must not be negative: %v",
 			finishEvent.Duration,
 		)
+	}
+}
+
+func TestObserverUsesExecuteScriptOperationIdentity(t *testing.T) {
+	observer := &commandObserverRecorder{}
+	recorder := contracttest.NewRecorder(
+		http.HandlerFunc(
+			func(
+				writer http.ResponseWriter,
+				request *http.Request,
+			) {
+				writer.Header().Set(
+					"Content-Type",
+					"application/json",
+				)
+
+				switch request.RequestURI {
+				case "/session":
+					_, _ = writer.Write(
+						[]byte(
+							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+						),
+					)
+
+				case "/session/session/execute/sync":
+					_, _ = writer.Write([]byte(`{"value":null}`))
+
+				default:
+					http.NotFound(writer, request)
+				}
+			},
+		),
+	)
+	server := contracttest.NewServer(recorder)
+	defer server.Close()
+
+	client, err := server.NewClient(
+		appium.ClientOptions{
+			Observer: observer,
+		},
+	)
+	if err != nil {
+		t.Fatalf("create client: %v", err)
+	}
+
+	session, err := client.CreateSession(
+		context.Background(),
+		appium.MatchCapabilities(
+			appium.Capabilities{
+				"platformName":          "iOS",
+				"appium:automationName": "XCUITest",
+			},
+		),
+	)
+	if err != nil {
+		t.Fatalf("create session: %v", err)
+	}
+
+	observer.reset()
+	recorder.Reset()
+
+	if _, err := session.ExecuteScriptWithOperation(
+		context.Background(),
+		"ios_press_button",
+		"mobile: pressButton",
+		nil,
+	); err != nil {
+		t.Fatalf("execute script: %v", err)
+	}
+
+	started, finished := observer.snapshot()
+	if len(started) != 1 || len(finished) != 1 {
+		t.Fatalf(
+			"unexpected observer event counts: started=%d finished=%d",
+			len(started),
+			len(finished),
+		)
+	}
+
+	if started[0].Operation != "ios_press_button" {
+		t.Fatalf("unexpected started operation: %q", started[0].Operation)
+	}
+	if finished[0].Operation != "ios_press_button" {
+		t.Fatalf("unexpected finished operation: %q", finished[0].Operation)
 	}
 }
 
