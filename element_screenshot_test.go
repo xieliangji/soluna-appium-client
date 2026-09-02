@@ -340,6 +340,11 @@ func newElementScreenshotFixture(
 						`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`,
 					))
 
+				case sessionURI + "/context":
+					_, _ = writer.Write([]byte(
+						`{"value":"NATIVE_APP"}`,
+					))
+
 				case sessionURI + "/elements":
 					_, _ = writer.Write([]byte(
 						`{"value":[{"element-6066-11e4-a52e-4f735466cecf":"element/id"}]}`,

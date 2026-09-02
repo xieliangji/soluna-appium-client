@@ -32,6 +32,12 @@ func TestElementTapUsesDeterministicWindowIntersectionPoint(t *testing.T) {
 						),
 					)
 
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
+					)
+
 				case request.Method == http.MethodPost &&
 					request.RequestURI == "/session/session/elements":
 					_, _ = writer.Write(
@@ -163,36 +169,36 @@ func TestElementTapUsesDeterministicWindowIntersectionPoint(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 3 {
+	if len(requests) != 4 {
 		t.Fatalf(
-			"unexpected default tap request count: expected 3, got %d",
+			"unexpected default tap request count: expected 4, got %d",
 			len(requests),
 		)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[0],
+		requests[1],
 		"/session/session/window/rect",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[1],
+		requests[2],
 		"/session/session/element/element/rect",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[2],
+		requests[3],
 		"/session/session/actions",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchJSONBody(
-		requests[2],
+		requests[3],
 		expectedTapActionsBody(
 			95,
 			30,
@@ -216,15 +222,15 @@ func TestElementTapUsesDeterministicWindowIntersectionPoint(t *testing.T) {
 	}
 
 	requests = recorder.Requests()
-	if len(requests) != 3 {
+	if len(requests) != 4 {
 		t.Fatalf(
-			"unexpected ratio tap request count: expected 3, got %d",
+			"unexpected ratio tap request count: expected 4, got %d",
 			len(requests),
 		)
 	}
 
 	if err := contracttest.MatchJSONBody(
-		requests[2],
+		requests[3],
 		expectedTapActionsBody(
 			85,
 			93,
@@ -265,22 +271,22 @@ func TestElementTapUsesDeterministicWindowIntersectionPoint(t *testing.T) {
 	}
 
 	requests = recorder.Requests()
-	if len(requests) != 2 {
+	if len(requests) != 3 {
 		t.Fatalf(
-			"unexpected no-intersection request count: expected 2, got %d",
+			"unexpected no-intersection request count: expected 3, got %d",
 			len(requests),
 		)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[0],
+		requests[1],
 		"/session/session/window/rect",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[1],
+		requests[2],
 		"/session/session/element/element/rect",
 	); err != nil {
 		t.Fatal(err)

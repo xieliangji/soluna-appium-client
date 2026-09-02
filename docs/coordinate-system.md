@@ -506,9 +506,9 @@ DP-061 需要据此完成最小运行时实现和协议测试：
 DP-060 本身不新增 Go 文件、公共 API、依赖、真实设备兼容性结论或自动坐标
 转换。
 
-## 11. 对 DP-091 的实现输入
+## 11. DP-091 实现结果
 
-DP-091 需要在根包统一执行链中实现 Context 命令和本设计确定的几何策略：
+DP-091 已在根包统一执行链中实现 Context 命令和本设计确定的几何策略：
 
 - 提供 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext`，
   分别使用 Appium 3 当前注册的路由 `GET /session/{sessionId}/contexts`、

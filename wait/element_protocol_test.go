@@ -28,6 +28,12 @@ func TestElementUsesPublicSessionFindForEachRetry(t *testing.T) {
 						`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`,
 					))
 
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/context":
+					_, _ = writer.Write([]byte(
+						`{"value":"NATIVE_APP"}`,
+					))
+
 				case request.Method == http.MethodPost &&
 					request.RequestURI == "/session/session%2Fid/elements":
 					if findCalls.Add(1) == 1 {
@@ -91,11 +97,13 @@ func TestElementUsesPublicSessionFindForEachRetry(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 4 {
-		t.Fatalf("request count = %d, want 4", len(requests))
+	if len(requests) != 6 {
+		t.Fatalf("request count = %d, want 6", len(requests))
 	}
 	expected := []string{
+		"/session/session%2Fid/context",
 		"/session/session%2Fid/elements",
+		"/session/session%2Fid/context",
 		"/session/session%2Fid/elements",
 		"/session/session%2Fid/window/rect",
 		"/session/session%2Fid/element/element%2Fid/rect",
@@ -122,6 +130,12 @@ func TestElementPreservesNotFoundWhenPublicFindEndsWithContext(t *testing.T) {
 					request.RequestURI == "/session":
 					_, _ = writer.Write([]byte(
 						`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+					))
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write([]byte(
+						`{"value":"NATIVE_APP"}`,
 					))
 
 				case request.Method == http.MethodPost &&
@@ -213,6 +227,12 @@ func TestElementDoesNotRetryStaleFindFailure(t *testing.T) {
 					request.RequestURI == "/session":
 					_, _ = writer.Write([]byte(
 						`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
+					))
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write([]byte(
+						`{"value":"NATIVE_APP"}`,
 					))
 
 				case request.Method == http.MethodPost &&

@@ -36,11 +36,12 @@ type Element struct {
 	id      string
 }
 
-// Find 查找当前 Window 中第一个匹配 Locator 的元素。
+// Find 查找当前 Context viewport 中第一个匹配 Locator 的元素。
 //
-// 底层会获取结构树中全部匹配元素，并按照远端返回顺序检查其 Rect。
-// 只有 Element Rect 与当前 Window Rect 存在正面积交集时，
-// 该元素才会被视为 Find 的有效结果。
+// 方法先读取当前 Context。NATIVE_APP 使用 Window Rect；已识别的 Web Context
+// 使用 CSS layout viewport，并按当前滚动偏移平移文档相对 Element Rect。
+// 底层会获取结构树中全部匹配元素，并按远端顺序返回第一个存在正面积交集的结果。
+// 未识别的 Context 不执行候选查找或几何 fallback。
 //
 // Locator Strategy 会按照调用方提供的协议值原样发送，
 // 客户端不会执行别名转换或自动规范化。
@@ -48,6 +49,18 @@ func (s *Session) Find(
 	ctx context.Context,
 	locator Locator,
 ) (*Element, error) {
+	if _, err := s.commandClient(findElementOperation); err != nil {
+		return nil, err
+	}
+	if err := validateLocator(findElementOperation, locator); err != nil {
+		return nil, err
+	}
+
+	kind, err := s.contextKindForGeometry(ctx, findElementOperation)
+	if err != nil {
+		return nil, err
+	}
+
 	candidates, err := s.findElementCandidates(
 		ctx,
 		findElementOperation,
@@ -58,40 +71,42 @@ func (s *Session) Find(
 	}
 
 	if len(candidates) == 0 {
-		return nil, elementNotFoundInWindowError(
+		return nil, elementNotFoundInContextViewportError(
 			findElementOperation,
+			kind,
 		)
 	}
 
-	windowRect, err := s.WindowRect(ctx)
+	geometry, err := s.geometryForContext(ctx, kind, findElementOperation)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, element := range candidates {
-		rect, err := element.Rect(ctx)
+		rect, err := geometry.elementRect(ctx, element)
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := intersectRects(
 			rect,
-			windowRect,
+			geometry.viewport,
 		); ok {
 			return element, nil
 		}
 	}
 
-	return nil, elementNotFoundInWindowError(
+	return nil, elementNotFoundInContextViewportError(
 		findElementOperation,
+		kind,
 	)
 }
 
-// FindElements 查找当前 Window 中全部匹配 Locator 的元素。
+// FindElements 查找当前 Context viewport 中全部匹配 Locator 的元素。
 //
-// 底层会获取结构树中全部匹配元素，并保持远端返回顺序。
-// 只有 Element Rect 与当前 Window Rect 存在正面积交集的元素
-// 才会包含在最终结果中。
+// NATIVE_APP 使用 Window Rect；已识别的 Web Context 使用 CSS layout viewport，
+// 并按当前滚动偏移平移文档相对 Element Rect。结果保持远端顺序，只包含存在
+// 正面积交集的元素。未识别的 Context 不执行候选查找或几何 fallback。
 //
 // Locator Strategy 会按照调用方提供的协议值原样发送，
 // 客户端不会执行别名转换或自动规范化。
@@ -101,6 +116,18 @@ func (s *Session) FindElements(
 	ctx context.Context,
 	locator Locator,
 ) ([]*Element, error) {
+	if _, err := s.commandClient(findElementsOperation); err != nil {
+		return nil, err
+	}
+	if err := validateLocator(findElementsOperation, locator); err != nil {
+		return nil, err
+	}
+
+	kind, err := s.contextKindForGeometry(ctx, findElementsOperation)
+	if err != nil {
+		return nil, err
+	}
+
 	candidates, err := s.findElementCandidates(
 		ctx,
 		findElementsOperation,
@@ -114,7 +141,7 @@ func (s *Session) FindElements(
 		return candidates, nil
 	}
 
-	windowRect, err := s.WindowRect(ctx)
+	geometry, err := s.geometryForContext(ctx, kind, findElementsOperation)
 	if err != nil {
 		return nil, err
 	}
@@ -126,14 +153,14 @@ func (s *Session) FindElements(
 	)
 
 	for _, element := range candidates {
-		rect, err := element.Rect(ctx)
+		rect, err := geometry.elementRect(ctx, element)
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := intersectRects(
 			rect,
-			windowRect,
+			geometry.viewport,
 		); ok {
 			elements = append(
 				elements,
@@ -159,13 +186,8 @@ func (s *Session) findElementCandidates(
 		return nil, err
 	}
 
-	if locator.Strategy == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "locator strategy is empty",
-			Delivery:  DeliveryNotSent,
-		}
+	if err := validateLocator(operation, locator); err != nil {
+		return nil, err
 	}
 
 	command, err := wire.NewCommand(
@@ -234,17 +256,23 @@ func (s *Session) findElementCandidates(
 	return elements, nil
 }
 
-// elementNotFoundInWindowError 表示没有匹配元素处于当前 Window 几何范围内。
+// elementNotFoundInContextViewportError 表示没有匹配元素处于当前几何范围内。
 //
 // 到达该结果前，候选查询已经获得远端响应，
 // 因此 Delivery 为 Acknowledged。
-func elementNotFoundInWindowError(
+func elementNotFoundInContextViewportError(
 	operation string,
+	kind applicationContextKind,
 ) error {
+	message := "no matching element intersects current window"
+	if kind == applicationContextWeb {
+		message = "no matching element intersects current web viewport"
+	}
+
 	return &Error{
 		Code:      CodeElementNotFound,
 		Operation: operation,
-		Message:   "no matching element intersects current window",
+		Message:   message,
 		Delivery:  DeliveryAcknowledged,
 	}
 }
@@ -257,12 +285,11 @@ func (e *Element) ID() string {
 	return e.id
 }
 
-// Find 在当前元素的后代中查找第一个位于当前 Window 内的匹配元素。
+// Find 在当前元素的后代中查找第一个位于当前 Context viewport 内的匹配元素。
 //
 // 底层使用 W3C Find Elements From Element 获取全部结构匹配候选，
-// 再按照远端返回顺序检查候选 Rect。
-// 只有候选 Rect 与当前 Window Rect 存在正面积交集时，
-// 该候选才会被视为有效结果。
+// 再按照远端返回顺序检查候选 Rect。NATIVE_APP 使用 Window Rect；已识别的
+// Web Context 使用按滚动偏移平移后的 CSS viewport Rect。
 //
 // Locator Strategy 会按照调用方提供的协议值原样发送，
 // 客户端不会执行别名转换或自动规范化。
@@ -270,6 +297,22 @@ func (e *Element) Find(
 	ctx context.Context,
 	locator Locator,
 ) (*Element, error) {
+	session, _, err := e.commandContext(findElementFromElementOperation)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateLocator(findElementFromElementOperation, locator); err != nil {
+		return nil, err
+	}
+
+	kind, err := session.contextKindForGeometry(
+		ctx,
+		findElementFromElementOperation,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	candidates, err := e.findElementCandidates(
 		ctx,
 		findElementFromElementOperation,
@@ -280,47 +323,68 @@ func (e *Element) Find(
 	}
 
 	if len(candidates) == 0 {
-		return nil, elementNotFoundInWindowError(
+		return nil, elementNotFoundInContextViewportError(
 			findElementFromElementOperation,
+			kind,
 		)
 	}
 
-	windowRect, err := e.session.WindowRect(ctx)
+	geometry, err := session.geometryForContext(
+		ctx,
+		kind,
+		findElementFromElementOperation,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, candidate := range candidates {
-		rect, err := candidate.Rect(ctx)
+		rect, err := geometry.elementRect(ctx, candidate)
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := intersectRects(
 			rect,
-			windowRect,
+			geometry.viewport,
 		); ok {
 			return candidate, nil
 		}
 	}
 
-	return nil, elementNotFoundInWindowError(
+	return nil, elementNotFoundInContextViewportError(
 		findElementFromElementOperation,
+		kind,
 	)
 }
 
-// FindElements 在当前元素的后代中查找全部位于当前 Window 内的匹配元素。
+// FindElements 在当前元素后代中查找全部位于当前 Context viewport 内的匹配元素。
 //
 // 底层使用 W3C Find Elements From Element 获取全部结构匹配候选，
-// 并保持远端返回顺序。
-// 只有候选 Rect 与当前 Window Rect 存在正面积交集的元素
-// 才会包含在最终结果中。
+// 并保持远端返回顺序。NATIVE_APP 使用 Window Rect；已识别的 Web Context
+// 使用按滚动偏移平移后的 CSS viewport Rect。
 //
 // 没有有效元素时返回非 nil 空 slice 和 nil error。
 func (e *Element) FindElements(
 	ctx context.Context,
 	locator Locator,
 ) ([]*Element, error) {
+	session, _, err := e.commandContext(findElementsFromElementOperation)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateLocator(findElementsFromElementOperation, locator); err != nil {
+		return nil, err
+	}
+
+	kind, err := session.contextKindForGeometry(
+		ctx,
+		findElementsFromElementOperation,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	candidates, err := e.findElementCandidates(
 		ctx,
 		findElementsFromElementOperation,
@@ -334,7 +398,11 @@ func (e *Element) FindElements(
 		return candidates, nil
 	}
 
-	windowRect, err := e.session.WindowRect(ctx)
+	geometry, err := session.geometryForContext(
+		ctx,
+		kind,
+		findElementsFromElementOperation,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -346,14 +414,14 @@ func (e *Element) FindElements(
 	)
 
 	for _, candidate := range candidates {
-		rect, err := candidate.Rect(ctx)
+		rect, err := geometry.elementRect(ctx, candidate)
 		if err != nil {
 			return nil, err
 		}
 
 		if _, ok := intersectRects(
 			rect,
-			windowRect,
+			geometry.viewport,
 		); ok {
 			elements = append(
 				elements,
@@ -379,13 +447,8 @@ func (e *Element) findElementCandidates(
 		return nil, err
 	}
 
-	if locator.Strategy == "" {
-		return nil, &Error{
-			Code:      CodeInvalidArgument,
-			Operation: operation,
-			Message:   "locator strategy is empty",
-			Delivery:  DeliveryNotSent,
-		}
+	if err := validateLocator(operation, locator); err != nil {
+		return nil, err
 	}
 
 	command, err := wire.NewCommand(
@@ -458,6 +521,14 @@ func (e *Element) findElementCandidates(
 
 // Rect 获取元素当前的 WebDriver Rect。
 func (e *Element) Rect(ctx context.Context) (Rect, error) {
+	return e.rectWithTransform(ctx, nil)
+}
+
+// rectWithTransform 在 Element Rect 命令的响应解码阶段应用可选坐标转换。
+func (e *Element) rectWithTransform(
+	ctx context.Context,
+	transform func(Rect) (Rect, error),
+) (Rect, error) {
 	session, client, err := e.commandContext(
 		getElementRectOperation,
 	)
@@ -497,6 +568,12 @@ func (e *Element) Rect(ctx context.Context) (Rect, error) {
 			decoded, decodeErr := decodeRect(ctx, value)
 			if decodeErr != nil {
 				return decodeErr
+			}
+			if transform != nil {
+				decoded, decodeErr = transform(decoded)
+				if decodeErr != nil {
+					return decodeErr
+				}
 			}
 
 			rect = decoded
@@ -635,10 +712,11 @@ func (e *Element) Attribute(
 	return value, exists, nil
 }
 
-// Tap 点击元素当前位于 Window 内的几何交集区域中心。
+// Tap 点击元素当前位于 Context viewport 内的几何交集区域中心。
 //
-// 点击位置由客户端根据当前 Window Rect 和 Element Rect 确定，
-// 不使用 WebDriver Element Click 的 Driver 侧点击位置计算。
+// NATIVE_APP 使用 Window Rect；已识别的 Web Context 使用 CSS layout viewport，
+// 并按当前滚动偏移平移文档相对 Element Rect。方法不使用 WebDriver Element Click
+// 的 Driver 侧点击位置计算，也不为未知 Context 执行 fallback。
 //
 // Tap 不保证目标位置没有被其他元素遮挡，也不表示元素视觉上可见或可交互。
 func (e *Element) Tap(
@@ -651,14 +729,14 @@ func (e *Element) Tap(
 	)
 }
 
-// TapInWindowIntersection 在元素与当前 Window 的几何交集区域内按比例点击。
+// TapInWindowIntersection 在元素与当前 Context viewport 的交集内按比例点击。
 //
 // xRatio 和 yRatio 分别表示交集区域水平方向和垂直方向的位置，
 // 有效范围均为 [0, 1]。
 // 0 表示最靠近起始边界的可用整数坐标，1 表示最靠近结束边界的可用整数坐标。
 //
-// 客户端只会发送严格位于 Element Rect 与 Window Rect
-// 正面积交集内部的整数 viewport 坐标。
+// NATIVE_APP 的 viewport 是 Window Rect；已识别 Web Context 的 viewport 是
+// CSS layout viewport。客户端只发送严格位于正面积交集内部的整数坐标。
 //
 // 如果两者没有正面积交集，或者交集内不存在可表示的整数 viewport 坐标，
 // 本方法不会发送 Tap。
@@ -681,22 +759,27 @@ func (e *Element) TapInWindowIntersection(
 		)
 	}
 
-	// Window 通常比元素位置稳定，因此先获取 Window，
-	// 再获取更容易随 UI 变化的 Element Rect，
-	// 尽量缩短 Element Rect 快照与实际 Tap 之间的时间。
-	windowRect, err := session.WindowRect(ctx)
+	kind, err := session.contextKindForGeometry(ctx, tapElementOperation)
 	if err != nil {
 		return err
 	}
 
-	elementRect, err := e.Rect(ctx)
+	// viewport 通常比元素位置稳定，因此先获取 viewport，
+	// 再获取更容易随 UI 变化的 Element Rect，
+	// 尽量缩短 Element Rect 快照与实际 Tap 之间的时间。
+	geometry, err := session.geometryForContext(ctx, kind, tapElementOperation)
+	if err != nil {
+		return err
+	}
+
+	elementRect, err := geometry.elementRect(ctx, e)
 	if err != nil {
 		return err
 	}
 
 	intersection, ok := intersectRects(
 		elementRect,
-		windowRect,
+		geometry.viewport,
 	)
 	if !ok {
 		return elementTapArgumentError(
@@ -907,6 +990,23 @@ func elementTapArgumentError(
 		Code:      CodeInvalidArgument,
 		Operation: tapElementOperation,
 		Message:   message,
+		Delivery:  DeliveryNotSent,
+	}
+}
+
+// validateLocator 校验 Element 查找的本地 Locator 参数。
+func validateLocator(
+	operation string,
+	locator Locator,
+) error {
+	if locator.Strategy != "" {
+		return nil
+	}
+
+	return &Error{
+		Code:      CodeInvalidArgument,
+		Operation: operation,
+		Message:   "locator strategy is empty",
 		Delivery:  DeliveryNotSent,
 	}
 }

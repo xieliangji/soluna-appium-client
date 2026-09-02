@@ -102,29 +102,29 @@ func TestElementFindUsesParentScopeAndStopsAtFirstWindowIntersection(
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 4 {
+	if len(requests) != 5 {
 		t.Fatalf(
-			"unexpected request count: expected 4, got %d",
+			"unexpected request count: expected 5, got %d",
 			len(requests),
 		)
 	}
 
 	if err := contracttest.MatchMethod(
-		requests[0],
+		requests[1],
 		http.MethodPost,
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[0],
+		requests[1],
 		"/session/session%2Fid/element/parent%2F1/elements",
 	); err != nil {
 		t.Fatal(err)
 	}
 
 	if err := contracttest.MatchJSONBody(
-		requests[0],
+		requests[1],
 		map[string]any{
 			"using": "xpath",
 			"value": ".//XCUIElementTypeButton",
@@ -134,7 +134,7 @@ func TestElementFindUsesParentScopeAndStopsAtFirstWindowIntersection(
 	}
 
 	if err := contracttest.MatchHeader(
-		requests[0],
+		requests[1],
 		"Content-Type",
 		"application/json",
 	); err != nil {
@@ -142,6 +142,7 @@ func TestElementFindUsesParentScopeAndStopsAtFirstWindowIntersection(
 	}
 
 	expectedURIs := []string{
+		"/session/session%2Fid/context",
 		"/session/session%2Fid/element/parent%2F1/elements",
 		"/session/session%2Fid/window/rect",
 		"/session/session%2Fid/element/child%2Foff/rect",
@@ -211,7 +212,7 @@ func TestElementFindEmptyResultsDoNotReadWindowRect(
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 1 {
+	if len(requests) != 2 {
 		t.Fatalf(
 			"empty FindElements must not read WindowRect: got %d requests",
 			len(requests),
@@ -219,7 +220,7 @@ func TestElementFindEmptyResultsDoNotReadWindowRect(
 	}
 
 	if err := contracttest.MatchRequestURI(
-		requests[0],
+		requests[1],
 		"/session/session%2Fid/element/parent%2F1/elements",
 	); err != nil {
 		t.Fatal(err)
@@ -263,7 +264,7 @@ func TestElementFindEmptyResultsDoNotReadWindowRect(
 	}
 
 	requests = recorder.Requests()
-	if len(requests) != 1 {
+	if len(requests) != 2 {
 		t.Fatalf(
 			"empty Find must not read WindowRect: got %d requests",
 			len(requests),
@@ -367,9 +368,9 @@ func TestElementFindElementsFiltersByWindowIntersection(
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 5 {
+	if len(requests) != 6 {
 		t.Fatalf(
-			"unexpected request count: expected 5, got %d",
+			"unexpected request count: expected 6, got %d",
 			len(requests),
 		)
 	}
@@ -482,9 +483,9 @@ func TestElementFindElementsFailsWhenCandidateRectIsInvalid(
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 4 {
+	if len(requests) != 5 {
 		t.Fatalf(
-			"unexpected request count: expected 4, got %d",
+			"unexpected request count: expected 5, got %d",
 			len(requests),
 		)
 	}
@@ -518,6 +519,12 @@ func newElementScopeTestParent(
 					[]byte(
 						`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`,
 					),
+				)
+
+			case request.Method == http.MethodGet &&
+				request.RequestURI == "/session/session%2Fid/context":
+				_, _ = writer.Write(
+					[]byte(`{"value":"NATIVE_APP"}`),
 				)
 
 			case request.Method == http.MethodPost &&

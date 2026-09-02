@@ -29,6 +29,11 @@ func TestFindRejectsLegacyElementReference(t *testing.T) {
 						),
 					)
 
+				case "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
+					)
+
 				case "/session/session/element":
 					_, _ = writer.Write(
 						[]byte(
@@ -128,6 +133,12 @@ func TestFindElements(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session/id","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session%2Fid/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -244,7 +255,7 @@ func TestFindElements(t *testing.T) {
 		)
 	}
 
-	request := requests[0]
+	request := requests[1]
 
 	if err := contracttest.MatchMethod(
 		request,
@@ -298,6 +309,12 @@ func TestFindElementsReturnsEmptySlice(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -389,6 +406,12 @@ func TestFindElementsRejectsInvalidElementReference(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -493,6 +516,12 @@ func TestFindSkipsOffWindowCandidatesAndStopsAtFirstIntersection(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -603,14 +632,15 @@ func TestFindSkipsOffWindowCandidatesAndStopsAtFirstIntersection(t *testing.T) {
 	}
 
 	requests := recorder.Requests()
-	if len(requests) != 4 {
+	if len(requests) != 5 {
 		t.Fatalf(
-			"unexpected request count: expected 4, got %d",
+			"unexpected request count: expected 5, got %d",
 			len(requests),
 		)
 	}
 
 	expectedURIs := []string{
+		"/session/session/context",
 		"/session/session/elements",
 		"/session/session/window/rect",
 		"/session/session/element/offscreen/rect",
@@ -627,7 +657,7 @@ func TestFindSkipsOffWindowCandidatesAndStopsAtFirstIntersection(t *testing.T) {
 	}
 
 	if err := contracttest.MatchJSONBody(
-		requests[0],
+		requests[1],
 		map[string]any{
 			"using": "id",
 			"value": "item",
@@ -656,6 +686,12 @@ func TestFindRejectsCandidatesWithoutPositiveWindowIntersection(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -784,6 +820,12 @@ func TestFindElementsFiltersByWindowIntersection(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&
@@ -927,6 +969,12 @@ func TestFindElementsFailsWhenCandidateRectIsInvalid(t *testing.T) {
 						[]byte(
 							`{"value":{"sessionId":"session","capabilities":{"automationName":"XCUITest"}}}`,
 						),
+					)
+
+				case request.Method == http.MethodGet &&
+					request.RequestURI == "/session/session/context":
+					_, _ = writer.Write(
+						[]byte(`{"value":"NATIVE_APP"}`),
 					)
 
 				case request.Method == http.MethodPost &&

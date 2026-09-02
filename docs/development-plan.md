@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-090`（已完成；下一项需显式选择）
+> 当前计划项：`DP-091`（已完成；下一项需显式选择）
 > 最后更新：2026-09-02
 
 ## Agent 执行约束
@@ -34,7 +34,7 @@
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Done | — |
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Done | DP-080 |
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Done | — |
-| 15 | `DP-091` Context API 实现 | `CTX-001` | Queued | DP-090 |
+| 15 | `DP-091` Context API 实现 | `CTX-001` | Done | DP-090 |
 | 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Queued | — |
 | 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Queued | DP-100 |
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Queued | — |

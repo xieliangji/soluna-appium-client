@@ -529,7 +529,7 @@ Element Screenshot 采用标准远端 Element Screenshot 语义，并提供内�
 
 ### 7.5 Context API、识别和本地状态（DP-090）
 
-DP-090 只固定 Context 的协议模型和 Web 几何边界；Context 运行时方法由
+DP-090 固定 Context 的协议模型和 Web 几何边界；Context 运行时方法已由
 DP-091 实现。公共入口保持根包 `Session`，不创建 Context 对象、平台 Session
 或第二套 Client：
 

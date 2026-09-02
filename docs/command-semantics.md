@@ -63,7 +63,7 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
-## Session Context（DP-090 设计契约，待 DP-091 实现）
+## Session Context（DP-091 已实现）
 
 Context API 只使用根包 `Session`，并通过 Appium 3 当前注册的 Context 路由读取或
 切换当前远端 Context：
@@ -80,7 +80,7 @@ JSON object。Session ID 按统一 Endpoint 规则作为独立路径段转义。
 Window Rect；Context 命令使用普通命令响应上限，不新增 Context 专用资源配额，
 也不自动重试、回退或恢复页面状态。
 
-DP-091 只以上述 `/session/{sessionId}/context` 与
+DP-091 实现只以上述 `/session/{sessionId}/context` 与
 `/session/{sessionId}/contexts` 作为请求目标，不改写或自动 fallback 到替代路由。
 
 `Contexts` 的成功 value 必须是 JSON string array。数组顺序和重复项按远端保留，
