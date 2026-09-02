@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-09-01
+> 最后更新：2026-09-02
 
 ## 1. 文档职责
 
@@ -406,6 +406,11 @@ Element stale 后不自动重新定位，因为 SDK 不保存足够的业务语�
 
 ### 7.2 查找作用域
 
+本节中的 `Context` 默认指 Appium application context（例如 `NATIVE_APP`、
+`WEBVIEW_xxx` 或 `CHROMIUM`）。W3C `browsing context` 仅用于解释 WebDriver
+DOM 几何规范；它可以表示浏览器中的顶层页面或 frame，不代表 SDK 在本设计中
+提供 frame/window switching API。
+
 Session 级查找和 Element 级后代查找都先依据调用时取得的当前 Context
 选择几何策略，再发送候选查找和几何命令。Context 读取只是策略选择用的快照，不是锁，也不与后续查找、
 Rect 读取或点击组成原子事务；客户端不缓存该快照、不串行化 Session 命令，
@@ -434,9 +439,10 @@ Rect 获取失败时不静默跳过，也不返回部分结果。除 Context 策
 
 #### 7.2.2 Web Context
 
-名称精确为 `WEBVIEW`，或以 `WEBVIEW_` 开头且带有非空后缀时，使用 Web
-策略。Context 名称的后缀（页面 ID、Bundle ID、进程或其他 Driver 标识）
-只作为不透明字符串保留，客户端不解析或重写。
+名称精确为 `WEBVIEW`、以 `WEBVIEW_` 开头且带有非空后缀，或精确为
+`CHROMIUM` 时，使用 Web 策略。`CHROMIUM` 是 UiAutomator2 纯浏览器会话的
+固定 Context 名称；Context 名称的后缀（页面 ID、Bundle ID、进程或其他 Driver
+标识）只作为不透明字符串保留，客户端不解析或重写。
 
 Web 查找仍然先通过 W3C plural element lookup 获取全部候选并保持远端顺序；
 候选为空时沿用既有短路语义，不读取 viewport。存在候选时再在同一个 CSS 坐标
@@ -462,9 +468,11 @@ WebDriver Get Element Rect 的 `X`/`Y` 按规范是相对于当前 browsing cont
 
 未设计的 Context 名称（包括空字符串、`WEBVIEW_` 本身以及其他 Driver/Plugin
 自定义名称）保持可由 Context API 读取，但不会被猜测为 Native 或 Web。
-Context-sensitive Find/Tap 在完成该 Context 快照后即返回 `CodeUnsupported`，不
-发送候选查找、几何探测或动作请求；不以 Native Window Rect 或 Web CSS viewport
-作为隐式 fallback。
+Context-sensitive Find/FindElements、Element Find/FindElements 或 Element Tap 在
+完成该 Context 快照后即返回主体操作的 `CodeUnsupported`/`DeliveryNotSent`，不发送
+候选查找、几何探测或动作请求；成功的 `CurrentContext` 探针只通过它自己的
+Observer 事件保留，不改变主体操作的
+Delivery；也不以 Native Window Rect 或 Web CSS viewport 作为隐式 fallback。
 
 性能优化不改变上述快照语义。当前先通过 benchmark 或测试基础设施记录候选数、
 Rect probe 数、首个可见候选位置和总耗时；在缺少基线前不改为
@@ -531,6 +539,12 @@ func (s *Session) CurrentContext(ctx context.Context) (string, error)
 func (s *Session) SwitchContext(ctx context.Context, name string) error
 ```
 
+上述方法只使用 Appium 3 正式 Appium Context 路由：`Contexts` 为
+`GET /session/{sessionId}/appium/contexts`，`CurrentContext` 为
+`GET /session/{sessionId}/appium/context`，`SwitchContext` 为
+`POST /session/{sessionId}/appium/context`。已废弃的 MJSONWP `/context(s)`
+路由不作为请求目标，也不增加兼容 fallback。
+
 Context 名称是远端定义的开放 UTF-8 字符串。读取结果保留原始字符串、顺序和
 重复项，不 trim、不做大小写折叠、不补前缀、不按列表位置推断类型。空字符串
 如果由远端返回也按字符串事实保留；它不能被识别为可用的 Native/Web Context。
@@ -542,8 +556,8 @@ Context 名称是远端定义的开放 UTF-8 字符串。读取结果保留原�
 | Context 名称 | 分类 | 几何策略 |
 |---|---|---|
 | 精确 `NATIVE_APP` | Native | Window Rect 与 Native Element Rect 交集 |
-| 精确 `WEBVIEW` 或 `WEBVIEW_` 加非空后缀 | Web | CSS layout viewport、滚动平移后的 DOM Element Rect 交集 |
-| 其他名称 | Unknown | Context API 可读取；Find/Tap 不自动选择策略 |
+| 精确 `WEBVIEW`、`WEBVIEW_` 加非空后缀或精确 `CHROMIUM` | Web | CSS layout viewport、滚动平移后的 DOM Element Rect 交集 |
+| 其他名称 | Unknown | Context API 可读取；组合 Find/Tap 返回 `CodeUnsupported` + `DeliveryNotSent`，不自动选择策略 |
 
 分类只用于选择已经设计的几何路径，不是 Runtime Discovery、Capability 或
 Driver 成功保证。客户端不根据 `automationName`、`Contexts` 返回顺序、页面源、
@@ -1066,7 +1080,7 @@ internal/bidi       BiDi 协议实现
 | AD-026 | Accepted | Pull Logs 对合法 UTF-8 `LogType` 使用完全开放透传（包括空字符串），非法 UTF-8 在 JSON 编码前拒绝；并使用严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
 | AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
-| AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW` 或带非空后缀的 `WEBVIEW_` 选择已定义几何策略；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异 |
+| AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 `/appium/context(s)` 正式路由并排除 legacy fallback；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

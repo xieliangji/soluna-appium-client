@@ -4,7 +4,7 @@
 > 适用阶段：v0.x 至首个稳定版本
 > 技术基线：Go 1.26.5，Appium 3.x
 > 对应设计项：`DP-060`、`DP-090`
-> 最后更新：2026-09-01
+> 最后更新：2026-09-02
 
 本文档是 SDK 坐标空间的主要事实源。它先于 `VIS-006` 和 `CTX-001` 的运行时代码，
 固定 `Rect`、`Point`、`PixelRect` 和 `ViewportRect` 的边界；不把不同 Driver 当前
@@ -89,9 +89,14 @@ Session 或独立的坐标转换器。
 ### 2.3 Web Context 的 DOM/CSS 几何（DP-090）
 
 Web Context 的几何边界以 WebDriver 和浏览器 CSSOM 的 viewport 语义为准，不借用
-Native Window Rect 或 Driver 像素 viewport。Context 名称的本地识别规则为：精确
-`NATIVE_APP` 是 Native；精确 `WEBVIEW` 或以 `WEBVIEW_` 开头且带非空后缀的是
-Web；其他名称保持 Unknown，不触发隐式策略。
+Native Window Rect 或 Driver 像素 viewport。本文中的 `Context` 默认指 Appium
+application context；W3C `browsing context` 仅用于说明 DOM 几何所属的页面或
+frame，不表示 SDK 提供 frame/window switching。Context 名称的本地识别规则为：
+精确 `NATIVE_APP` 是 Native；精确 `WEBVIEW`、以 `WEBVIEW_` 开头且带非空后缀，
+或精确 `CHROMIUM` 均为 Web；其他名称保持 Unknown，不触发隐式策略。
+Unknown Context 的 Context-sensitive Find/Tap 在成功取得该快照后，主体操作返回
+`CodeUnsupported` + `DeliveryNotSent`；成功的 `CurrentContext` 探针只保留在自身
+Observer 事件中，不改变主体操作的 Delivery。
 
 在已识别的 Web Context 中，浏览器 viewport 定义为当前 browsing context 的
 **layout viewport**。一次固定的根包 Execute Script 同时读取
@@ -506,8 +511,11 @@ DP-060 本身不新增 Go 文件、公共 API、依赖、真实设备兼容性�
 DP-091 需要在根包统一执行链中实现 Context 命令和本设计确定的几何策略：
 
 - 提供 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext`，
-  使用 Appium 3 的标准 Context 路由，严格解码 string/array/null，并原样保留
-  Context 名称、顺序和重复项；
+  分别使用 Appium 3 正式路由 `GET /session/{sessionId}/appium/contexts`、
+  `GET /session/{sessionId}/appium/context` 和
+  `POST /session/{sessionId}/appium/context`；严格解码 string/array/null，并
+  原样保留 Context 名称、顺序和重复项。旧 MJSONWP `/context(s)` 路由不作为
+  请求目标，也不增加兼容 fallback；
 - 以当前远端 Context 的精确名称选择 Native、Web 或 Unknown；不依赖
   Runtime Discovery、Capability、列表顺序或自动 Context fallback；
 - Native Find/Tap 的既有 Window Rect 交集、整数点和 Actions 请求保持不变；
@@ -518,8 +526,12 @@ DP-091 需要在根包统一执行链中实现 Context 命令和本设计确定�
   竞争时不缓存、不重试、不返回部分结果；Unknown Context 不发送替代几何请求；
 - Context 切换不批量失效或重定位 Element，不维护 Session 级 current-context 缓存，
   也不建立 Session 命令串行器；
-- 覆盖 Native、Web、Unknown Context，空/重复名称，滚动与小数 Rect，viewport
-  无效值，Context 切换失败或 `DeliveryUnknown`、stale 以及未发送错误；
+- 覆盖 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_`、精确 `CHROMIUM` 和
+  Unknown Context，空/重复名称，滚动与小数 Rect，viewport 无效值，Context
+  切换失败或 `DeliveryUnknown`、stale 以及未发送错误；Unknown Context 下的
+  组合 Find/FindElements/Element Find/Element Tap 应为
+  `CodeUnsupported` + `DeliveryNotSent`，且除成功的 `CurrentContext` 探针外
+  不发送主体请求；
 - 在协议测试之外，按 Safari/WKWebView、Android WebView/Chrome、Driver/WDA/
   Chromedriver、设备 OS、真机/模拟器和 Appium Host OS 组合记录真实兼容性。
 

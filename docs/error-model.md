@@ -42,7 +42,11 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 ## Context 与 Web 几何错误
 
 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext` 使用
-Appium 3 标准 Context 命令，并复用统一的 Error/Delivery 映射：
+Appium 3 正式 Appium Context 路由（分别为
+`GET /session/{sessionId}/appium/contexts`、
+`GET /session/{sessionId}/appium/context` 和
+`POST /session/{sessionId}/appium/context`），并复用统一的 Error/Delivery 映射。
+旧 MJSONWP `/context(s)` 路由不作为请求目标，也不增加兼容 fallback：
 
 - `Contexts` 的成功 value 必须是 JSON string array；顶层 `null`、错误类型、
   非 string 数组项或无法严格解码为有效 UTF-8 的 JSON string，以及
@@ -58,18 +62,20 @@ Appium 3 标准 Context 命令，并复用统一的 Error/Delivery 映射：
 - `SwitchContext` 在 `DeliveryUnknown` 时不更新或推测本地状态；调用方可显式
   读取 `CurrentContext`，客户端不重放切换请求。
 
-Context 名称只有精确 `NATIVE_APP`、精确 `WEBVIEW` 或带非空后缀的 `WEBVIEW_`
-才进入已经定义的 Native/Web 几何策略。Unknown Context 下的
-Context-sensitive Element Find/Tap 在完成 Context 快照后，若分类为 Unknown，立即
-返回 `CodeUnsupported`，不发送候选查找、几何探针或动作命令；不把该结果伪装成
-Element Not Found，也不使用另一种几何 fallback。Context
-探针、元素查找、Rect、CSS viewport 探针和 Actions 是独立命令；其中任一命令
-失败都按其自身的 Operation、StatusCode、Delivery 和 Cause 返回，不交付部分
-元素结果。Unknown 分类若来自已成功的 `CurrentContext` 探针，组合 API 返回的
-`CodeUnsupported` 保留该探针已确认的 `DeliveryAcknowledged`，但这只说明
-Context 探针已收到响应，不表示 Find 或 Tap 的后续命令已发送；未发送的后续请求
-不另造或伪造 Delivery 状态。直接调用 `Element.Rect` 不执行 Context 分类探针，
-其错误只反映该 Rect 命令自身的投递事实。
+Context 名称只有精确 `NATIVE_APP`、精确 `WEBVIEW`、带非空后缀的 `WEBVIEW_`
+或精确 `CHROMIUM` 才进入已经定义的 Native/Web 几何策略；`CHROMIUM` 是
+UiAutomator2 纯浏览器会话使用的固定 Web Context 名称。Unknown Context 下的
+Context-sensitive Find/Tap（包括 Session/Element 的 Find 和 FindElements）在
+完成 Context 快照后，若分类为 Unknown，立即为主体操作返回
+`CodeUnsupported` + `DeliveryNotSent`，不发送候选查找、几何探针或动作命令；
+不把该结果伪装成 Element Not Found，也不使用另一种几何 fallback。这里的
+Delivery 和 Operation 只描述未发送的主体 Find/Tap 操作（例如
+`find_element`、`find_elements` 或 `tap_element`）；成功的 `CurrentContext`
+探针只由其自己的 Observer 事件记录，不把探针的
+`DeliveryAcknowledged` 借用到组合错误上。Context 探针、元素查找、Rect、CSS
+viewport 探针和 Actions 是独立命令；其中任一命令失败都按其自身的 Operation、
+StatusCode、Delivery 和 Cause 返回，不交付部分元素结果。直接调用 `Element.Rect`
+不执行 Context 分类探针，其错误只反映该 Rect 命令自身的投递事实。
 
 Web 几何响应必须能在统一 Execute Script decoder 中解码为包含有限
 `scrollX`/`scrollY`、正面积 `width`/`height` 的 CSS layout viewport，并将

@@ -65,20 +65,24 @@ GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或
 
 ## Session Context（DP-090 设计契约，待 DP-091 实现）
 
-Context API 只使用根包 `Session`，并通过 Appium 3 标准 Context 路由读取或切换
-当前远端 Context：
+Context API 只使用根包 `Session`，并通过 Appium 3 正式 Appium Context 路由读取或
+切换当前远端 Context：
 
 | API | HTTP | 路径 | 请求体 | 成功 value |
 |---|---|---|---|---|
-| `Session.Contexts` | GET | `/session/{sessionId}/contexts` | 无 | JSON string 数组，解码为 `[]string` |
-| `Session.CurrentContext` | GET | `/session/{sessionId}/context` | 无 | JSON string |
-| `Session.SwitchContext` | POST | `/session/{sessionId}/context` | `{"name":"<context>"}` | `null` |
+| `Session.Contexts` | GET | `/session/{sessionId}/appium/contexts` | 无 | JSON string 数组，解码为 `[]string` |
+| `Session.CurrentContext` | GET | `/session/{sessionId}/appium/context` | 无 | JSON string |
+| `Session.SwitchContext` | POST | `/session/{sessionId}/appium/context` | `{"name":"<context>"}` | `null` |
 
 GET 请求不带 body，也不发送 `Content-Type`；POST 始终发送只含 `name` 字段的
 JSON object。Session ID 按统一 Endpoint 规则作为独立路径段转义。每次方法调用
 只发送一次对应请求，不隐式先读取 Context 列表、Discovery、Healthy 或
 Window Rect；Context 命令使用普通命令响应上限，不新增 Context 专用资源配额，
 也不自动重试、回退或恢复页面状态。
+
+上述 `/appium/context` 与 `/appium/contexts` 是 Appium 3 的正式路由。旧的
+`/session/{sessionId}/context` 与 `/session/{sessionId}/contexts` 属于已废弃的
+MJSONWP 路由；SDK 不为它们增加兼容 fallback，也不把它们作为 DP-091 的请求目标。
 
 `Contexts` 的成功 value 必须是 JSON string array。数组顺序和重复项按远端保留，
 空数组返回非 nil 空 slice；`null`、object、字符串或数组中的非 string 项均为
@@ -95,15 +99,18 @@ surrogate 校验）。`CurrentContext` 的成功 value 必须是 JSON string（�
 部分 Context 快照。
 
 Context 名称的本地几何分类区分大小写：精确 `NATIVE_APP` 为 Native，精确
-`WEBVIEW` 或带非空后缀的 `WEBVIEW_` 为 Web，其他名称为 Unknown。该分类只
-选择 `docs/coordinate-system.md` 与 `docs/design.md` 已定义的几何路径，不是
+`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 为 Web，其他名称为
+Unknown。`CHROMIUM` 是 UiAutomator2 纯浏览器会话使用的固定 Context 名称；该
+分类只选择 `docs/coordinate-system.md` 与 `docs/design.md` 已定义的几何路径，不是
 Runtime Discovery 或能力成功保证。Context-sensitive Element Find/Tap 先使用一次
 当前 Context 快照来选择路径，再发送候选查找或几何命令；客户端不缓存 current Context，不从列表顺序、
 Capability、页面源或 Host 工具推测，也不在 Unknown Context 下隐式使用另一种
-路径。Unknown Context 在该快照成功后即返回 `CodeUnsupported`，不发送候选查找、
-几何探针或 Actions。Native/Web 的 Context-sensitive Find/Tap 都会为这次策略
-选择增加该 `CurrentContext` 请求；直接的 Element Rect 命令不因 Context 类型而
-增加该快照。Context 快照与
+路径。Unknown Context 在该快照成功后即为主体 Find/FindElements、Element
+Find/FindElements 或 Element Tap 操作返回 `CodeUnsupported` /
+`DeliveryNotSent`，不发送候选查找、几何探针或 Actions。这里的 Delivery 只描述
+主体操作；成功的 `CurrentContext` 探针仍由它自己的 Observer 事件记录。
+Native/Web 的 Context-sensitive Find/Tap 都会为这次策略选择增加该 `CurrentContext`
+请求；直接的 Element Rect 命令不因 Context 类型而增加该快照。Context 快照与
 后续元素查找、Rect、viewport 探针和 Actions 不是原子事务；
 竞争或页面滚动时沿用各底层命令的真实结果。
 
