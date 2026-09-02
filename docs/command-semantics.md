@@ -65,14 +65,14 @@ GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或
 
 ## Session Context（DP-090 设计契约，待 DP-091 实现）
 
-Context API 只使用根包 `Session`，并通过 Appium 3 正式 Appium Context 路由读取或
+Context API 只使用根包 `Session`，并通过 Appium 3 当前注册的 Context 路由读取或
 切换当前远端 Context：
 
 | API | HTTP | 路径 | 请求体 | 成功 value |
 |---|---|---|---|---|
-| `Session.Contexts` | GET | `/session/{sessionId}/appium/contexts` | 无 | JSON string 数组，解码为 `[]string` |
-| `Session.CurrentContext` | GET | `/session/{sessionId}/appium/context` | 无 | JSON string |
-| `Session.SwitchContext` | POST | `/session/{sessionId}/appium/context` | `{"name":"<context>"}` | `null` |
+| `Session.Contexts` | GET | `/session/{sessionId}/contexts` | 无 | JSON string 数组，解码为 `[]string` |
+| `Session.CurrentContext` | GET | `/session/{sessionId}/context` | 无 | JSON string |
+| `Session.SwitchContext` | POST | `/session/{sessionId}/context` | `{"name":"<context>"}` | `null` |
 
 GET 请求不带 body，也不发送 `Content-Type`；POST 始终发送只含 `name` 字段的
 JSON object。Session ID 按统一 Endpoint 规则作为独立路径段转义。每次方法调用
@@ -80,9 +80,8 @@ JSON object。Session ID 按统一 Endpoint 规则作为独立路径段转义。
 Window Rect；Context 命令使用普通命令响应上限，不新增 Context 专用资源配额，
 也不自动重试、回退或恢复页面状态。
 
-上述 `/appium/context` 与 `/appium/contexts` 是 Appium 3 的正式路由。旧的
-`/session/{sessionId}/context` 与 `/session/{sessionId}/contexts` 属于已废弃的
-MJSONWP 路由；SDK 不为它们增加兼容 fallback，也不把它们作为 DP-091 的请求目标。
+DP-091 只以上述 `/session/{sessionId}/context` 与
+`/session/{sessionId}/contexts` 作为请求目标，不改写或自动 fallback 到替代路由。
 
 `Contexts` 的成功 value 必须是 JSON string array。数组顺序和重复项按远端保留，
 空数组返回非 nil 空 slice；`null`、object、字符串或数组中的非 string 项均为

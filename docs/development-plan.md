@@ -259,9 +259,9 @@ CSS layout viewport，将 WebDriver 文档相对 DOM Element Rect 平移到 view
 坐标后计算正面积交集，不做 CSS/device-pixel、status bar、orientation 或
 `PixelRect` 转换。Find/Tap 不自动滚动、点击
 fallback、iframe 遍历或 stale 重定位；Context 列表、当前 Context 和切换不缓存，
-切换结果不推测后续本地状态。Context API 只使用 Appium 3 正式
-`/session/{sessionId}/appium/contexts` 与 `/session/{sessionId}/appium/context`
-路由，排除已废弃 MJSONWP `/context(s)` fallback；Unknown Context 下组合
+切换结果不推测后续本地状态。Context API 只使用 Appium 3 当前注册的
+`/session/{sessionId}/contexts` 与 `/session/{sessionId}/context` 路由，不改写或
+fallback 到替代路由；Unknown Context 下组合
 Find/Tap 返回主体操作的 `CodeUnsupported` + `DeliveryNotSent`，成功的
 `CurrentContext` 探针只保留在自身 Observer 事件中。已记录 Appium 3、XCUITest/Safari/WKWebView、
 UiAutomator2/Android WebView、Driver/WDA/Chromedriver、设备 OS、真机/模拟器和
@@ -272,7 +272,7 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 ### DP-091 Context API 实现
 
 - 实现 Context 列表、当前 Context 和切换。
-- 按 DP-090 固定的 Appium 3 `/appium/context(s)` 路由严格解码；切换失败或投递
+- 按 DP-090 固定的 Appium 3 裸 `/context(s)` 路由严格解码；切换失败或投递
   不确定时不推测本地状态。
 - 保持 Native 行为，实现 DP-090 的 Web CSS viewport/DOM Rect 几何策略。
 - 排除自动 Context fallback 和未设计的 Hybrid 发现。

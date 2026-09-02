@@ -511,11 +511,10 @@ DP-060 本身不新增 Go 文件、公共 API、依赖、真实设备兼容性�
 DP-091 需要在根包统一执行链中实现 Context 命令和本设计确定的几何策略：
 
 - 提供 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext`，
-  分别使用 Appium 3 正式路由 `GET /session/{sessionId}/appium/contexts`、
-  `GET /session/{sessionId}/appium/context` 和
-  `POST /session/{sessionId}/appium/context`；严格解码 string/array/null，并
-  原样保留 Context 名称、顺序和重复项。旧 MJSONWP `/context(s)` 路由不作为
-  请求目标，也不增加兼容 fallback；
+  分别使用 Appium 3 当前注册的路由 `GET /session/{sessionId}/contexts`、
+  `GET /session/{sessionId}/context` 和 `POST /session/{sessionId}/context`；
+  严格解码 string/array/null，并原样保留 Context 名称、顺序和重复项；不改写或
+  自动 fallback 到替代路由；
 - 以当前远端 Context 的精确名称选择 Native、Web 或 Unknown；不依赖
   Runtime Discovery、Capability、列表顺序或自动 Context fallback；
 - Native Find/Tap 的既有 Window Rect 交集、整数点和 Actions 请求保持不变；

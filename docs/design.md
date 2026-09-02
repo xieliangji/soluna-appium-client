@@ -471,8 +471,8 @@ WebDriver Get Element Rect 的 `X`/`Y` 按规范是相对于当前 browsing cont
 Context-sensitive Find/FindElements、Element Find/FindElements 或 Element Tap 在
 完成该 Context 快照后即返回主体操作的 `CodeUnsupported`/`DeliveryNotSent`，不发送
 候选查找、几何探测或动作请求；成功的 `CurrentContext` 探针只通过它自己的
-Observer 事件保留，不改变主体操作的
-Delivery；也不以 Native Window Rect 或 Web CSS viewport 作为隐式 fallback。
+Observer 事件保留，不改变主体操作的 Delivery；也不以 Native Window Rect 或
+Web CSS viewport 作为隐式 fallback。
 
 性能优化不改变上述快照语义。当前先通过 benchmark 或测试基础设施记录候选数、
 Rect probe 数、首个可见候选位置和总耗时；在缺少基线前不改为
@@ -539,11 +539,10 @@ func (s *Session) CurrentContext(ctx context.Context) (string, error)
 func (s *Session) SwitchContext(ctx context.Context, name string) error
 ```
 
-上述方法只使用 Appium 3 正式 Appium Context 路由：`Contexts` 为
-`GET /session/{sessionId}/appium/contexts`，`CurrentContext` 为
-`GET /session/{sessionId}/appium/context`，`SwitchContext` 为
-`POST /session/{sessionId}/appium/context`。已废弃的 MJSONWP `/context(s)`
-路由不作为请求目标，也不增加兼容 fallback。
+上述方法只使用 Appium 3 当前注册的 Context 路由：`Contexts` 为
+`GET /session/{sessionId}/contexts`，`CurrentContext` 为
+`GET /session/{sessionId}/context`，`SwitchContext` 为
+`POST /session/{sessionId}/context`。不改写或自动 fallback 到替代路由。
 
 Context 名称是远端定义的开放 UTF-8 字符串。读取结果保留原始字符串、顺序和
 重复项，不 trim、不做大小写折叠、不补前缀、不按列表位置推断类型。空字符串
@@ -1080,7 +1079,7 @@ internal/bidi       BiDi 协议实现
 | AD-026 | Accepted | Pull Logs 对合法 UTF-8 `LogType` 使用完全开放透传（包括空字符串），非法 UTF-8 在 JSON 编码前拒绝；并使用严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
 | AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
-| AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 `/appium/context(s)` 正式路由并排除 legacy fallback；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
+| AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 当前注册的裸 `/context(s)` 路由，不改写或 fallback 到替代路由；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

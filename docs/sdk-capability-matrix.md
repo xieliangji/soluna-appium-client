@@ -153,7 +153,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Accepted | Appium 3 `/appium/context(s)` commands + Web CSS viewport/DOM Rect strategy | 精确 `NATIVE_APP` 为 Native，精确 `WEBVIEW`、非空后缀 `WEBVIEW_` 和精确 `CHROMIUM` 为 Web；Unknown 不 fallback，组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Context 不缓存；Safari/Hybrid 组合需真实验证 | None | DP-090 已完成 `docs/design.md`、`docs/coordinate-system.md`、`docs/command-semantics.md`、`docs/error-model.md`；DP-091 实现并补协议测试 |
+| CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Accepted | Appium 3 裸 `/context(s)` commands + Web CSS viewport/DOM Rect strategy | 精确 `NATIVE_APP` 为 Native，精确 `WEBVIEW`、非空后缀 `WEBVIEW_` 和精确 `CHROMIUM` 为 Web；Unknown 不 fallback，组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Context 不缓存；Safari/Hybrid 组合需真实验证 | None | DP-090 已完成 `docs/design.md`、`docs/coordinate-system.md`、`docs/command-semantics.md`、`docs/error-model.md`；DP-091 实现并补协议测试 |
 | NAV-001 | 将当前 App 放入后台且不自动恢复 | Session method | Accepted | Appium background command | 恢复由 `ActivateApp` 显式执行 | None | 新增 `navigation.go` |
 | NAV-002 | 屏幕方向读取与设置 | Session method | Accepted | Appium Orientation | Portrait/Landscape 强类型 | None | 新增 `orientation.go` |
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |

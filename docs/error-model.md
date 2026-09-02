@@ -42,11 +42,10 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 ## Context 与 Web 几何错误
 
 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext` 使用
-Appium 3 正式 Appium Context 路由（分别为
-`GET /session/{sessionId}/appium/contexts`、
-`GET /session/{sessionId}/appium/context` 和
-`POST /session/{sessionId}/appium/context`），并复用统一的 Error/Delivery 映射。
-旧 MJSONWP `/context(s)` 路由不作为请求目标，也不增加兼容 fallback：
+Appium 3 当前注册的 Context 路由（分别为
+`GET /session/{sessionId}/contexts`、`GET /session/{sessionId}/context` 和
+`POST /session/{sessionId}/context`），并复用统一的 Error/Delivery 映射。不改写
+或自动 fallback 到替代路由：
 
 - `Contexts` 的成功 value 必须是 JSON string array；顶层 `null`、错误类型、
   非 string 数组项或无法严格解码为有效 UTF-8 的 JSON string，以及
