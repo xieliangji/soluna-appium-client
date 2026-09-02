@@ -3,27 +3,32 @@
 > 文档状态：Active
 > 适用阶段：v0.x 至首个稳定版本
 > 技术基线：Go 1.26.5，Appium 3.x
-> 对应设计项：`DP-060`
-> 最后更新：2026-08-30
+> 对应设计项：`DP-060`、`DP-090`
+> 最后更新：2026-09-01
 
-本文档是 SDK 坐标空间的主要事实源。它先于 `VIS-006` 的运行时代码，固定
-`Rect`、`Point`、`PixelRect` 和 `ViewportRect` 的边界；不把不同 Driver 当前
+本文档是 SDK 坐标空间的主要事实源。它先于 `VIS-006` 和 `CTX-001` 的运行时代码，
+固定 `Rect`、`Point`、`PixelRect` 和 `ViewportRect` 的边界；不把不同 Driver 当前
 实现中可以观察到的换算步骤变成客户端的隐式行为，也不把 Driver 报告的像素
 几何自动绑定到某一次 Screenshot 的解码图像。
 
 ## 1. 结论
 
-SDK 区分三个不能自动等同的概念：
+SDK 区分四个不能自动等同的概念：
 
 | 概念 | 公共表示 | 单位和原点 | 主要用途 |
 |---|---|---|---|
-| WebDriver 几何空间 | `Rect`、`Point` | Driver 的 WebDriver 坐标单位；原点和轴方向由 WebDriver viewport 定义 | `WindowRect`、`Element.Rect`、W3C Actions |
+| Native WebDriver 几何空间 | `Rect`、`Point` | Native Driver 的 WebDriver 坐标单位；原点和轴方向由 WebDriver viewport 定义 | Native `WindowRect`、`Element.Rect`、W3C Actions |
+| Web DOM/CSS 几何空间 | `Rect`、`Point` | 文档坐标和 viewport-relative 坐标均使用当前 Web browsing context 的 CSS pixel；文档原点与 viewport 原点通过 `scrollX`/`scrollY` 连接 | Web `Element.Rect`、Web Find/Tap 的几何判断、W3C Actions |
 | Driver 像素几何 | `PixelRect` | 产生该值的 Driver 命令所报告的整数像素单位和原点；类型本身不标识具体像素平面 | `ViewportRect` 等 Driver 几何事实 |
 | 具体截图像素平面 | 每个解码后的 Screenshot 产物自身拥有 | 该图像缓冲区的实际像素；原点为图像左上角，X 向右、Y 向下 | 图像解码、OCR/CV，以及兼容性确认后的裁剪 |
 
-`Rect`/`Point` 和 `PixelRect` 不可互换。尤其是名称都包含 viewport 时，
-W3C Actions 的 viewport 与 Appium `mobile: viewportRect` 返回的 Driver 像素
-viewport 仍然属于不同空间。`PixelRect` 也不自动等于任意一次
+`Rect`/`Point` 和 `PixelRect` 不可互换。`Rect`/`Point` 在 Native 与 Web Context
+下仍是同一组 Go 类型，但单位由当前 Context 决定；来自不同 Context 的快照不能
+混用。Web Context 内还要区分 WebDriver Element Rect 的文档坐标和 Actions 使用
+的 viewport-relative CSS 坐标；二者只通过同一快照的 `scrollX`/`scrollY` 平移
+连接。尤其是名称都包含 viewport 时，W3C Actions 的 viewport、Web 浏览器 CSS
+viewport 与 Appium `mobile: viewportRect` 返回的 Driver 像素 viewport 仍然属于
+不同空间。`PixelRect` 也不自动等于任意一次
 `Session.Screenshot` 或 `Element.Screenshot` 的裁剪坐标；两者是否共享同一
 具体像素平面是兼容性事实。
 
@@ -49,31 +54,113 @@ Session 或独立的坐标转换器。
 ### 2.1 `Rect` 与 `Point`
 
 - `Rect` 的 `X`、`Y`、`Width`、`Height` 使用 `float64`，保留远端 WebDriver
-  返回的连续坐标语义。元素矩形可以有小数坐标，不能据此推断 Driver 像素
-  几何或某一张截图的像素位置。
+  返回的连续坐标语义。Native 与 Web 的单位分别由当前 Context 的契约定义；
+  元素矩形可以有小数坐标，不能据此推断 Driver 像素几何或某一张截图的像素位置。
 - `Point` 的 `X`、`Y` 使用 `int`，只用于 W3C Actions 的整数指针位置。
 - 两种类型都以左上角为基准，X 轴向右、Y 轴向下；矩形按半开区域
   `[X, X+Width) × [Y, Y+Height)` 理解。
-- `WindowRect` 和 `Element.Rect` 都属于该空间。`WindowRect` 的字段是
-  WebDriver 的 window/viewport 事实，不是截图的宽高证明。
+- `WindowRect` 属于 Native WebDriver 几何空间；`Element.Rect` 的单位和原点由
+  当前 Context 决定。Native 中它与 Window Rect 处于同一 Driver 几何；Web 中
+  `Element.Rect` 的 `x`/`y` 是相对文档元素的绝对 CSS pixel 坐标，供几何操作
+  使用前必须按当前滚动快照平移到 viewport-relative 坐标。`WindowRect` 的字段
+  是 WebDriver 的 window/viewport 事实，不是浏览器 CSS viewport 或截图的宽高
+  证明。
 - `Point` 使用 `origin: "viewport"` 发送时，坐标是当前 WebDriver viewport
   坐标；客户端不会先乘以设备 scale，也不会加减 status bar 偏移。
 
 `Rect` 的现有行为保持不变：它承载 WebDriver 的连续值，不承担 Driver 像素
 几何或具体截图像素平面的边界校验；引入 `PixelRect` 不会改变其 `float64`
-形态，也不会把 `PixelRect` 的单位或边界规则附加到 `Rect`。对 `Rect` 的查找
-和点击校验仍由现有 Element 行为负责。
+形态，也不会把 `PixelRect` 的单位或边界规则附加到 `Rect`。对 Native `Rect` 的
+查找和点击校验仍由现有 Element 行为负责，Web `Rect` 的 viewport 交集规则见
+下文 DP-090 设计。
 
 ### 2.2 现有调用的空间归属
 
 | API/数据 | 空间 | 设计约束 |
 |---|---|---|
 | `Session.WindowRect` | WebDriver | 供 Native Element 查找和点击交集使用 |
-| `Element.Rect` | WebDriver | 只描述 Driver 返回的元素几何 |
-| `Session.Tap`、`LongPress`、`Swipe` | WebDriver | 通过 W3C Actions 发送整数 viewport 坐标 |
-| `Element.TapInWindowIntersection` | WebDriver | 只计算 `WindowRect` 与 `Element.Rect` 的交集 |
+| `Element.Rect` | 当前 Context 的 WebDriver 几何 | Native 返回 Driver 几何；Web 返回 WebDriver 规定的文档相对 CSS pixel Rect；不附带 Context 标签，也不自动读取滚动或 viewport |
+| `Session.Tap`、`LongPress`、`Swipe` | 当前 Context 的 WebDriver viewport | 通过既有 W3C Actions 发送整数坐标；Web 调用方提供 CSS pixel，Native 行为不变 |
+| Native `Element.TapInWindowIntersection` | Native WebDriver | 只计算 `WindowRect` 与 `Element.Rect` 的交集 |
+| Web `Element.TapInWindowIntersection` | Web DOM/CSS | 先用同一滚动快照把 `Element.Rect` 平移到 viewport-relative CSS 坐标，再计算与 CSS layout viewport 的交集；不读取 `PixelRect` |
 | `Session.Screenshot`、`Element.Screenshot` | 具体图像产物 | 每次解码结果拥有自己的像素平面；不自动绑定 `Rect` 或 `PixelRect` |
 | `Session.ViewportRect` | Driver 像素几何 | 报告当前 Driver 的 viewport pixel geometry；不改变上面任何 API，也不自动成为 Screenshot crop rectangle |
+
+### 2.3 Web Context 的 DOM/CSS 几何（DP-090）
+
+Web Context 的几何边界以 WebDriver 和浏览器 CSSOM 的 viewport 语义为准，不借用
+Native Window Rect 或 Driver 像素 viewport。Context 名称的本地识别规则为：精确
+`NATIVE_APP` 是 Native；精确 `WEBVIEW` 或以 `WEBVIEW_` 开头且带非空后缀的是
+Web；其他名称保持 Unknown，不触发隐式策略。
+
+在已识别的 Web Context 中，浏览器 viewport 定义为当前 browsing context 的
+**layout viewport**。一次固定的根包 Execute Script 同时读取
+`window.scrollX`、`window.scrollY`、`window.innerWidth` 和
+`window.innerHeight`，并在文档坐标系中构造：
+
+```text
+documentViewport = Rect{
+    X:      scrollX,
+    Y:      scrollY,
+    Width:  innerWidth,
+    Height: innerHeight,
+}
+viewportRect = Rect{X: 0, Y: 0, Width: innerWidth, Height: innerHeight}
+```
+
+`innerWidth` 和 `innerHeight` 是 SDK 明确定义的 layout viewport 尺寸来源（包括
+浏览器对滚动条的既有处理），不是从 Native Window Rect、Screenshot 或
+`document.documentElement.clientWidth/Height` 推导。四个脚本结果必须是有限数，
+宽高必须为正，且文档 viewport 的右/下端点仍须有限；读取失败或返回无效几何时，
+整个 Find/Tap 操作失败，不回退到 Window Rect。viewport-relative 原点固定为
+页面 viewport 左上角，X 向右、Y 向下，单位为 CSS pixel。
+
+依据 [W3C WebDriver Get Element Rect](https://w3c.github.io/webdriver/#get-element-rect)，
+`x`/`y` 在该 Context 中按规范解释为相对于文档元素的绝对 CSS pixel 坐标；
+`width`/`height` 是元素 bounding rectangle 的 CSS pixel 尺寸。`Rect` 的小数值
+原样保留。用于几何操作时，SDK 只做同一 CSS 空间内的平移：
+
+```text
+viewportElementRect = Rect{
+    X:      elementRect.X - scrollX,
+    Y:      elementRect.Y - scrollY,
+    Width:  elementRect.Width,
+    Height: elementRect.Height,
+}
+```
+
+该平移不是 device-pixel 转换；SDK 不使用 `devicePixelRatio`、display density、
+原生 status bar、orientation 或 `PixelRect` 做乘除、偏移、旋转或宽高交换。若
+平移后的坐标或端点不是有限值，整个操作按响应格式错误处理，不返回部分结果。
+若远端 Driver 返回与 WebDriver 文档坐标契约不同的值，客户端不从数值猜测、
+双重扣除或自动切换另一种解释，具体组合必须在兼容性验证中记录。
+
+Driver、Chromedriver 或 WebView setting 可能改变 Element Rect 的坐标基准；验证
+记录必须包含这些 setting。DP-091 不替调用方设置、读取或修正该状态，未确认
+坐标基准的组合不能宣称 Web Find/Tap 已兼容。
+
+浏览器的 visual viewport、pinch zoom、页面缩放、滚动条、软键盘和浏览器 UI
+可能使 CSS layout viewport 与实际触控可见区域不同。SDK 不读取这些事实来构造
+隐式转换，也不宣称 CSS pixel 与 Screenshot 像素或 Native touch 像素等价；相关
+差异只能通过具体 Safari/WebView、Driver、设备和 Host 组合验证。`getClientRects`
+的多片段、CSS transform、遮挡、`visibility`、`pointer-events`、enabled 状态和
+嵌套滚动容器不额外建模，使用远端 Element Rect 的单一矩形事实。
+
+Web Find/FindElements 在该空间内采用与 Native 相同的顺序和整体成功原则：先
+取得全部候选；候选为空时直接返回合法空结果，不读取 viewport。存在候选时再
+读取一次 CSS viewport，按远端顺序读取候选 Rect，将其平移为 viewport-relative
+Rect 后筛选与 `viewportRect` 的正面积交集；任何候选 Rect、滚动偏移或 viewport
+解码失败都不返回部分结果。该判断只证明矩形与当前 browsing context 的 CSS
+viewport 有正面积交集，
+不证明元素可见、未被遮挡或最终会响应触控。SDK 不自动滚动到元素、不遍历或
+重算 iframe 边界、不执行 DOM 重定位脚本；调用方显式切换 browsing context 后，
+仍以该上下文的远端 Rect 和 viewport 事实为准。
+
+Web Element Tap 使用平移后交集中的整数 CSS viewport 点，并复用现有半开矩形和
+比例规则。整数化只发生在发送 Actions 前；若交集不包含可表示的整数点则本地
+拒绝，不发送副作用命令。W3C Actions 的请求路径和既有 pointer 类型不因 Context
+自动替换；浏览器要求 mouse pointer、Element Click 或 JavaScript click 时，必须
+另行设计和验证，不能在本能力中隐式 fallback。
 
 ## 3. Driver 像素几何与 `PixelRect`
 
@@ -99,8 +186,9 @@ Context、采集路径和稳定状态下完成兼容性验证后，调用方才�
 Screenshot 的裁剪矩形；SDK 不保存或推断这种关联。
 
 上述 Native Context 语义不延伸为 Web Context 的 DOM/CSS viewport 语义；
-Web Context 的关系由 `DP-090` 单独定义。Screenshot 的实际像素宽高和像素平面
-始终以该次解码图像自身为准。
+Web Context 使用本文件 §2.3 定义的 CSS layout viewport。`ViewportRect` 仍然是
+Driver 像素几何，不能替代该 CSS viewport。Screenshot 的实际像素宽高和像素
+平面始终以该次解码图像自身为准。
 
 ### 3.2 不做别名或单位猜测
 
@@ -197,6 +285,17 @@ Driver 事实接口。读取这些字段不会改变 `WindowRect`、`Element.Rec
 `ViewportRect` 或 Screenshot 的单位，不会证明 ViewportRect 与 Screenshot
 共享像素平面，也不会在 Session 内形成可供后续命令复用的转换状态。
 
+### 4.4 Web Context 的方向、系统栏与滚动
+
+Web Context 的 CSS viewport 随浏览器 layout 状态变化。orientation、Safari 或
+WebView 的地址栏/工具栏、软键盘和页面滚动都可能改变 `innerWidth`、
+`innerHeight`、`scrollX`/`scrollY` 或 Element Rect；每次 Context-sensitive
+Find/Tap 都重新读取同一份所需快照，并在 CSS 文档坐标内应用该快照的滚动平移，
+不主动滚动、不缓存偏移，也不交换宽高、旋转原点、扣除 Native status bar 或应用
+安全区常量。CSS layout viewport 不承诺等于 visual viewport、触控设备像素或任一
+Screenshot 平面。pinch zoom、非 1 的 `devicePixelRatio` 和浏览器 UI 偏移属于
+兼容性验证维度，SDK 不因这些状态自动缩放、偏移或重试。
+
 ## 5. `Session.ViewportRect` 的调用边界（DP-061 输入）
 
 ### 5.1 公共入口和请求
@@ -277,23 +376,29 @@ scale 或 status bar 修正来“挽救”异常值。
 
 ## 7. 与 Find、Tap 和 Screenshot 的明确隔离
 
-`ViewportRect` 不参与现有 Native Find/Tap：
+`ViewportRect` 不参与 Native 或 Web Context 的 Element Find/Tap：
 
-1. `Session.Find`/`FindElements` 继续使用 WebDriver `WindowRect` 和
+1. Native `Session.Find`/`FindElements` 继续使用 WebDriver `WindowRect` 和
    `Element.Rect` 的正面积交集；
-2. `Element.Tap`/`TapInWindowIntersection` 继续在 WebDriver 坐标空间计算
-   整数 `Point`，并通过 W3C Actions 的 viewport origin 发送；
-3. `Session.Tap`、`LongPress` 和 `Swipe` 不读取 `ViewportRect`，也不因 scale、
-   orientation 或 status bar 自动改写坐标；
-4. `PixelRect` 不作为 Element Rect、Window Rect 或 Actions 的替代类型；
-5. `Session.Screenshot` 不读取或校验 `ViewportRect`，`Session.ViewportRect` 也不
-   触发截图或返回 Screenshot 引用；
-6. 只有调用方已经为同一环境、Context、采集路径和稳定状态确认像素平面兼容时，
+2. Web `Session.Find`/`FindElements` 使用 §2.3 的 CSS layout viewport、滚动
+   快照和由 `Element.Rect` 平移得到的 viewport-relative Rect 做正面积交集；不
+   把 `WindowRect` 当作浏览器 viewport；
+3. Native `Element.Tap`/`TapInWindowIntersection` 继续在既有 WebDriver 坐标
+   空间计算整数 `Point`；Web 版本先将文档 Rect 平移到 CSS viewport 空间，再计算
+   整数 `Point`；两者都通过根包 W3C Actions 的 viewport origin 发送；
+4. `Session.Tap`、`LongPress` 和 `Swipe` 不读取 `ViewportRect`，也不因 scale、
+   orientation、status bar、density 或 devicePixelRatio 自动改写坐标；调用方
+   必须按当前 Context 提供正确单位；
+5. `PixelRect` 不作为 Element Rect、Window Rect、CSS viewport 或 Actions 的替代
+   类型；CSS pixel 与 Driver pixel 之间没有 SDK 内置转换；
+6. `Session.Screenshot` 不读取或校验 `ViewportRect` 或 CSS viewport，
+   `Session.ViewportRect` 也不触发截图或返回 Screenshot 引用；
+7. 只有调用方已经为同一环境、Context、采集路径和稳定状态确认像素平面兼容时，
    才能自行把 `PixelRect` 用作 crop rectangle；SDK 不自动裁剪或保存该结论。
 
-这条边界目前只覆盖 Native Context。Web Context 的 DOM rect、浏览器 CSS
-viewport、页面滚动和设备 Screenshot 的关系留给 `DP-090` 单独设计；在该设计
-完成前，不能把 `ViewportRect` 用作 DOM Element 的可见性或点击证明。
+Web Context 的 DOM rect、CSS viewport 和页面滚动只在 §2.3 定义的 CSS 空间内
+解释；文档 Rect 到 viewport Rect 的滚动平移不等于 device-pixel 转换，也不提供
+与设备 Screenshot 像素平面或 Native `ViewportRect` 的等价证明。
 
 ## 8. 与 Screenshot 像素平面的兼容性验证
 
@@ -322,6 +427,28 @@ viewport、页面滚动和设备 Screenshot 的关系留给 `DP-090` 单独设�
 该流程是诊断和兼容性验证，不是普通命令的运行时门禁。SDK 不持久化验证结论，
 也不要求每次业务调用同时读取 Screenshot。
 
+### 8.1 Web Context 的兼容性验证（DP-090）
+
+Web CSS 几何与 Actions 的组合必须按具体环境单独验证，不把 Native
+`ViewportRect` 的结果或单一浏览器测试外推为 Web Context 保证。每个验证记录
+至少包含：
+
+| 维度 | 需要记录的事实 |
+|---|---|
+| 协议与 Driver | SDK、Appium 3、XCUITest/UiAutomator2、WDA/UiAutomator2 Server、必要的 Web Inspector 或 Chromedriver 版本 |
+| 浏览器/容器 | iOS Safari/WebKit、WKWebView，或 Android WebView/Chrome 的版本与调试能力 |
+| 设备与 Host | 设备 OS、真机/模拟器、Appium Host OS、连接方式 |
+| Context 状态 | `Contexts` 原始列表、切换结果、当前 Context、是否存在多个 WebView，以及影响 Rect 坐标基准的 Driver/WebView setting |
+| 几何与动作 | `innerWidth`/`innerHeight`、`scrollX`/`scrollY`、文档 Rect 到 viewport Rect 的平移、小数/滚动 Rect、orientation、缩放、系统栏/键盘状态和 Actions 实际命中结果 |
+
+测试应在稳定页面中分别覆盖初始加载、页面滚动（含滚动偏移平移）、部分交集、零面积、DOM 重排
+以及 Context 切换后的新快照，并记录命令顺序。Safari/WKWebView 的 Web Inspector、
+WDA、Safari/WebKit 和 Host 条件，Android WebView/Chrome 的 Chromedriver 匹配，
+都可能改变 Context 列表、CSS viewport 或 Actions 结果。SDK 不安装、启动或探测
+这些组件，也不调用 `xcodebuild`、`simctl`、`adb`、`chromedriver` 等 Host 工具。
+只有将真实结果写入 `docs/compatibility.md` 的具体组合才能标记 `Verified`；
+DP-090 当前不提供任何未经实测的 Safari、Hybrid、设备 OS 或 Host OS 保证。
+
 ## 9. 被拒绝的方案
 
 - **复用 `Rect` 表示像素区域**：同名字段仍会隐藏逻辑单位、scale 和半开整数
@@ -343,7 +470,17 @@ viewport、页面滚动和设备 Screenshot 的关系留给 `DP-090` 单独设�
   尺寸、方向和像素密度尚未有统一等价承诺，Viewport Screenshot 仍是 `VIS-007`
   的 Deferred 能力。
 - **把 ViewportRect 接入 Find/Tap**：会把 Driver 像素几何与 WebDriver 坐标
-  混用，破坏现有 Native 几何和 Actions 契约。
+  或 Web CSS 几何混用，破坏现有 Native/Web 几何和 Actions 契约。
+- **把 Native WindowRect 当作 Web 浏览器 viewport**：移动浏览器的 window、layout
+  viewport 和 visual viewport 可能不同；必须使用当前 Web Context 的 CSS viewport，
+  不从 WindowRect、Screenshot 或固定设备常量推导。
+- **把 CSS pixel 自动换算为 device pixel**：同一 CSS 空间内为处理页面滚动而
+  应用 `scrollX`/`scrollY` 平移是必要的坐标原点转换，但
+  `devicePixelRatio`、浏览器缩放、Driver 输入映射和截图采集路径并不构成跨版本
+  统一模型；SDK 不乘除比例或补偿原生 status bar。
+- **为 Web 元素自动滚动、点击 fallback 或重新定位**：这些动作会改变页面状态、
+  命中语义或副作用边界；调用方需显式编排，SDK 不改用 Element Click、JavaScript
+  click 或隐藏的 stale 恢复。
 - **使用 `adb`、`simctl`、`xctrace` 等 Host 工具补齐坐标**：超出根包协议
   边界，也不能可靠代表远端 Driver 当前 Context 和窗口事实。
 
@@ -363,3 +500,28 @@ DP-061 需要据此完成最小运行时实现和协议测试：
 
 DP-060 本身不新增 Go 文件、公共 API、依赖、真实设备兼容性结论或自动坐标
 转换。
+
+## 11. 对 DP-091 的实现输入
+
+DP-091 需要在根包统一执行链中实现 Context 命令和本设计确定的几何策略：
+
+- 提供 `Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext`，
+  使用 Appium 3 的标准 Context 路由，严格解码 string/array/null，并原样保留
+  Context 名称、顺序和重复项；
+- 以当前远端 Context 的精确名称选择 Native、Web 或 Unknown；不依赖
+  Runtime Discovery、Capability、列表顺序或自动 Context fallback；
+- Native Find/Tap 的既有 Window Rect 交集、整数点和 Actions 请求保持不变；
+  Web Find/Tap 使用一次 CSS layout viewport 探针（`window.scrollX` /
+  `window.scrollY`、`window.innerWidth`/`window.innerHeight`），将 WebDriver
+  文档相对 Element Rect 平移到 viewport CSS pixel 后计算交集；
+- 对 viewport/Rect 解码执行整体成功校验，页面滚动、缩放、DOM 重排和 Context
+  竞争时不缓存、不重试、不返回部分结果；Unknown Context 不发送替代几何请求；
+- Context 切换不批量失效或重定位 Element，不维护 Session 级 current-context 缓存，
+  也不建立 Session 命令串行器；
+- 覆盖 Native、Web、Unknown Context，空/重复名称，滚动与小数 Rect，viewport
+  无效值，Context 切换失败或 `DeliveryUnknown`、stale 以及未发送错误；
+- 在协议测试之外，按 Safari/WKWebView、Android WebView/Chrome、Driver/WDA/
+  Chromedriver、设备 OS、真机/模拟器和 Appium Host OS 组合记录真实兼容性。
+
+DP-090 本身不新增 Go 文件、运行时请求、第三方依赖、Host 工具调用或真实
+兼容性结论。

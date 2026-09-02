@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-08-31
+> 最后更新：2026-09-01
 
 ## 1. 文档目的
 
@@ -114,11 +114,11 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| ELM-001 | `Session.Find` / `FindElements` | Session method | Implemented | W3C plural element lookup + Window intersection | Native Context 语义已定义 | Protocol | `element.go`, `element_find_test.go` |
-| ELM-002 | Element 作用域 `Find` / `FindElements` | Element method | Implemented | W3C plural find from element + Window intersection | Native Context 语义已定义 | Protocol | `element.go`, `element_find_scope_test.go` |
-| ELM-003 | `Element.Rect` / `Text` / `Attribute` | Element method | Implemented | W3C Element commands | Attribute 允许远端 `null` | Protocol | `element.go`, `element_test.go` |
+| ELM-001 | `Session.Find` / `FindElements` | Session method | Implemented | W3C plural element lookup + Context-specific geometry | Native 行为已实现；Web 以滚动快照将文档相对 Rect 平移到 CSS viewport 的策略由 DP-090 定义，待 DP-091 接入 | Protocol | `element.go`, `element_find_test.go`, `docs/design.md`, `docs/coordinate-system.md` |
+| ELM-002 | Element 作用域 `Find` / `FindElements` | Element method | Implemented | W3C plural find from element + Context-specific geometry | Native 行为已实现；Web 以滚动快照将文档相对 Rect 平移到 CSS viewport 的策略由 DP-090 定义，待 DP-091 接入 | Protocol | `element.go`, `element_find_scope_test.go`, `docs/design.md`, `docs/coordinate-system.md` |
+| ELM-003 | `Element.Rect` / `Text` / `Attribute` | Element method | Implemented | W3C Element commands | Native 行为已实现；Web 中 Rect 保留 WebDriver 文档相对 CSS pixel 语义，Context-sensitive Find/Tap 的 viewport 平移待 DP-091 接入；Attribute 允许远端 `null` | Protocol | `element.go`, `element_test.go`, `docs/design.md`, `docs/coordinate-system.md` |
 | ELM-004 | `Element.Clear` / `SendKeys` | Element method | Implemented | W3C Element commands | Driver 输入法行为不同 | Protocol | `element.go`, `element_test.go` |
-| ELM-005 | `Element.Tap` / `TapInWindowIntersection` | Element method | Implemented | Window/Element Rect + W3C Actions | 每次点击重新读取几何状态 | Protocol | `element.go`, `element_tap_test.go` |
+| ELM-005 | `Element.Tap` / `TapInWindowIntersection` | Element method | Implemented | Context-specific Rect intersection + W3C Actions | Native 行为已实现；Web 以滚动快照平移文档 Rect 到 CSS viewport 的策略由 DP-090 定义，待 DP-091 接入；每次点击重新读取几何状态 | Protocol | `element.go`, `element_tap_test.go`, `docs/design.md`, `docs/coordinate-system.md` |
 | ELM-006 | `Element.Screenshot` | Element method | Implemented | W3C Element Screenshot | 不承诺自动滚动或与本地裁剪等价 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
 | ELM-007 | `Element.ScreenshotTo(io.Writer)` | Element method | Implemented | 流式 Base64 解码 | 使用 Screenshot 专用上限 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
 | ELM-008 | `Displayed` / `Enabled` / `Selected` | Element method | Excluded | Driver 状态查询 | 不能满足当前确定性语义要求 | None | 如未来重新引入需单独评审 |
@@ -132,7 +132,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | VIS-003 | `Session.ScreenshotTo(io.Writer)` | Session method | Implemented | 流式 Base64 解码 | 返回已写入字节数；共享 Screenshot 上限 | Protocol | `screenshot.go`, `screenshot_test.go` |
 | VIS-004 | Screenshot 专用资源上限 | Client option | Implemented | Client Limits | Session/Element Screenshot 共用 | Protocol | `limits.go`, `client.go`, `screenshot_test.go`, `element_screenshot_test.go` |
 | VIS-005 | `Session.PageSource` | Session method | Implemented | W3C Page Source | 独立 Page Source 上限 | Protocol | `session.go`, `session_inspection_test.go` |
-| VIS-006 | `Session.ViewportRect` / `PixelRect` | Session method | Implemented | Appium mobile viewport rect | XCUITest / UiAutomator2；精确 AutomationName 门禁；当前坐标契约以 Native Context 为主；Driver 像素几何不绑定具体 Screenshot，具体 Screenshot 像素关系待 compatibility 验证；不参与 Element Find/Tap，也不执行隐式转换 | Protocol | `viewport.go`, `viewport_test.go`, `docs/coordinate-system.md`, `docs/command-semantics.md` |
+| VIS-006 | `Session.ViewportRect` / `PixelRect` | Session method | Implemented | Appium mobile viewport rect | XCUITest / UiAutomator2；精确 AutomationName 门禁；Driver 像素几何独立于 Native/Web Context；不参与 Native/Web Element Find/Tap，不绑定具体 Screenshot，也不执行 CSS/device-pixel、scale、status bar 或 orientation 转换 | Protocol | `viewport.go`, `viewport_test.go`, `docs/coordinate-system.md`, `docs/command-semantics.md` |
 | VIS-007 | Viewport Screenshot | Session method | Deferred | Driver 截图后裁剪 | Driver/Host 图像依赖不同 | None | 先分别读取 Screenshot 与 ViewportRect；仅在具体组合验证同一像素平面后由调用方裁剪 |
 | VIS-008 | 隐式坐标缩放或自动转换 | Internal / test infrastructure | Excluded | Client-side transform | 缺少完整方向/状态栏/Context 模型 | None | 只报告事实，不静默转换 |
 
@@ -153,7 +153,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Architecture | Appium Context commands | 先定义 Web Context 的 Find/Rect 几何语义 | None | 独立 Context 里程碑 |
+| CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Accepted | Appium 3 Context commands + Web CSS viewport/DOM Rect strategy | `NATIVE_APP` 与 `WEBVIEW` 前缀规则精确分类；Unknown 不 fallback；Context 不缓存；Safari/Hybrid 组合需真实验证 | None | DP-090 已完成 `docs/design.md`、`docs/coordinate-system.md`、`docs/command-semantics.md`、`docs/error-model.md`；DP-091 实现并补协议测试 |
 | NAV-001 | 将当前 App 放入后台且不自动恢复 | Session method | Accepted | Appium background command | 恢复由 `ActivateApp` 显式执行 | None | 新增 `navigation.go` |
 | NAV-002 | 屏幕方向读取与设置 | Session method | Accepted | Appium Orientation | Portrait/Landscape 强类型 | None | 新增 `orientation.go` |
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |

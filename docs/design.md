@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-08-31
+> 最后更新：2026-09-01
 
 ## 1. 文档职责
 
@@ -406,7 +406,19 @@ Element stale 后不自动重新定位，因为 SDK 不保存足够的业务语�
 
 ### 7.2 查找作用域
 
-Session 级查找和 Element 级后代查找使用相同的结果筛选原则：
+Session 级查找和 Element 级后代查找都先依据调用时取得的当前 Context
+选择几何策略，再发送候选查找和几何命令。Context 读取只是策略选择用的快照，不是锁，也不与后续查找、
+Rect 读取或点击组成原子事务；客户端不缓存该快照、不串行化 Session 命令，
+Context 在任意一步发生变化时以远端实际响应为准。
+
+只有需要按 Context 筛选几何的 `Find`、`FindElements`、`Element.Find`、
+`Element.FindElements` 和 Element Tap 才执行这次 Context 快照。直接调用
+`Element.Rect` 仍只发送标准 WebDriver Rect 命令并返回远端原始值，不因为当前
+Context 未知而本地改写或拒绝；它也不隐式读取 viewport 或滚动偏移。
+
+#### 7.2.1 Native Context
+
+只有名称精确等于 `NATIVE_APP` 的 Context 才使用 Native 策略：
 
 1. 获取远端返回的全部候选；
 2. 保持远端顺序；
@@ -414,9 +426,45 @@ Session 级查找和 Element 级后代查找使用相同的结果筛选原则：
 4. 逐个读取候选 Rect；
 5. 只保留与当前 Window 存在正面积交集的候选。
 
-`Find` 返回第一个有效候选并立即停止；`FindElements` 返回全部有效候选。Rect 获取失败时不静默跳过，也不返回部分结果。
+`Find` 返回第一个有效候选并立即停止；`FindElements` 返回全部有效候选。
+Rect 获取失败时不静默跳过，也不返回部分结果。除 Context 策略选择所需的独立
+快照外，该策略的候选/Rect 请求顺序、交集规则和错误语义保持既有 Native 行为；
+因此实现会在这些命令前增加一次 `CurrentContext` 请求，但不会把该请求缓存或
+替换为默认 Native 假设。
 
-该规则当前只对 Native Context 成立。引入 Web Context 前必须单独设计 DOM 元素坐标与浏览器 viewport 的关系，不能直接复用 Native 的 Window Rect 相交算法。
+#### 7.2.2 Web Context
+
+名称精确为 `WEBVIEW`，或以 `WEBVIEW_` 开头且带有非空后缀时，使用 Web
+策略。Context 名称的后缀（页面 ID、Bundle ID、进程或其他 Driver 标识）
+只作为不透明字符串保留，客户端不解析或重写。
+
+Web 查找仍然先通过 W3C plural element lookup 获取全部候选并保持远端顺序；
+候选为空时沿用既有短路语义，不读取 viewport。存在候选时再在同一个 CSS 坐标
+空间内：
+
+1. 读取当前浏览器 layout viewport，原点固定为 `(0, 0)`，单位为 CSS pixel；
+2. 逐个读取候选的 WebDriver Element Rect；
+3. 将 Rect 的文档坐标减去该快照的 `scrollX`/`scrollY`，得到 viewport-relative
+   的 CSS Rect；
+4. 只保留与该 CSS viewport 存在正面积交集的候选。
+
+WebDriver Get Element Rect 的 `X`/`Y` 按规范是相对于当前 browsing context
+文档元素的绝对 CSS pixel 坐标；`Width`/`Height` 是元素 bounding rectangle
+的 CSS pixel 尺寸。因而页面滚动时，原始 Rect 通常保持文档坐标，只有经
+`scrollX`/`scrollY` 平移后的 viewport Rect 参与交集和点击。SDK 不把文档坐标
+直接当作 viewport 坐标，也不把 CSS pixel 乘以 `devicePixelRatio`。若某个 Driver
+返回与该 WebDriver 契约不同的坐标，客户端不从数值猜测、双重扣除或自动切换
+另一种解释；该组合的差异必须在兼容性验证中记录。元素是 DOM 中存在的事实并
+不等于当前 viewport 内存在可操作的几何；没有正面积交集时，`Find` 返回既有
+`CodeElementNotFound`，`FindElements` 返回非 nil 空 slice。不自动滚动、展开
+折叠容器、遍历或重算 iframe 边界，或以 JavaScript 重新定位元素；若调用方显式
+切换了 browsing context，偏移和 Rect 仍以该上下文的远端命令事实为准。
+
+未设计的 Context 名称（包括空字符串、`WEBVIEW_` 本身以及其他 Driver/Plugin
+自定义名称）保持可由 Context API 读取，但不会被猜测为 Native 或 Web。
+Context-sensitive Find/Tap 在完成该 Context 快照后即返回 `CodeUnsupported`，不
+发送候选查找、几何探测或动作请求；不以 Native Window Rect 或 Web CSS viewport
+作为隐式 fallback。
 
 性能优化不改变上述快照语义。当前先通过 benchmark 或测试基础设施记录候选数、
 Rect probe 数、首个可见候选位置和总耗时；在缺少基线前不改为
@@ -424,7 +472,7 @@ Rect probe 数、首个可见候选位置和总耗时；在缺少基线前不改
 
 ### 7.3 确定坐标点击
 
-Element 默认点击不依赖 Driver 的元素 click 语义，而是：
+Native Context 下，Element 默认点击不依赖 Driver 的元素 click 语义，而是：
 
 1. 重新读取 Window Rect；
 2. 重新读取 Element Rect；
@@ -434,7 +482,29 @@ Element 默认点击不依赖 Driver 的元素 click 语义，而是：
 
 默认位置为交集区域中心。指定比例时，比例基于交集区域计算，不基于 Element 原始 Rect。
 
-Find 成功不代表后续 Tap 可以使用旧坐标。每次 Tap 都重新获取几何状态。
+Web Context 下，`Element.Tap` 和 `Element.TapInWindowIntersection` 保持同一个
+确定坐标原则，但将 Window Rect 替换为当前浏览器 CSS viewport：
+
+1. 重新确认当前 Context 为已识别的 Web Context；
+2. 读取一次当前 CSS viewport 及其 `scrollX`/`scrollY`；
+3. 重新读取 WebDriver Element Rect；
+4. 将文档坐标 Rect 平移为 viewport-relative CSS Rect，并计算二者的正面积
+   交集；
+5. 在交集内按既有比例规则选择整数 CSS viewport 坐标；
+6. 复用根包现有 W3C Actions 执行链发送该坐标。
+
+`Point` 在 Web Context 中表示 CSS viewport 坐标；客户端不应用
+`devicePixelRatio`、原生 status bar、orientation 或 `PixelRect` 偏移。现有
+Actions 使用的 pointer 类型和请求路径不因 Context 自动切换；某个浏览器或
+Driver 需要另一种输入源时，必须由单独的能力设计和兼容性验证解决，不能偷偷
+改为 Element Click、JavaScript `click()` 或其他 fallback。当前页面滚动、缩放、
+DOM 重排或 Context 变化可能发生在 Rect 与 Actions 之间；SDK 不重试、不恢复，
+也不承诺点击一定命中元素。
+
+`Session.Tap`、`LongPress` 和 `Swipe` 不读取 `ViewportRect`，也不为获得坐标
+额外探测 Context。调用方负责在当前 Context 中提供正确单位的 `Point`；Native
+行为保持不变。Find 成功同样不代表后续 Tap 可以使用旧坐标，每次 Tap 都重新
+获取所需几何状态。
 
 ### 7.4 Element Screenshot
 
@@ -449,9 +519,73 @@ Element Screenshot 采用标准远端 Element Screenshot 语义，并提供内�
 - 与完整截图按 Element Rect 本地裁剪完全一致；
 - Element Rect 与截图像素直接一一对应。
 
+### 7.5 Context API、识别和本地状态（DP-090）
+
+DP-090 只固定 Context 的协议模型和 Web 几何边界；Context 运行时方法由
+DP-091 实现。公共入口保持根包 `Session`，不创建 Context 对象、平台 Session
+或第二套 Client：
+
+```go
+func (s *Session) Contexts(ctx context.Context) ([]string, error)
+func (s *Session) CurrentContext(ctx context.Context) (string, error)
+func (s *Session) SwitchContext(ctx context.Context, name string) error
+```
+
+Context 名称是远端定义的开放 UTF-8 字符串。读取结果保留原始字符串、顺序和
+重复项，不 trim、不做大小写折叠、不补前缀、不按列表位置推断类型。空字符串
+如果由远端返回也按字符串事实保留；它不能被识别为可用的 Native/Web Context。
+切换请求只发送调用方给出的确切名称（非法 UTF-8 在编码前按本地参数错误拒绝），
+是否存在、是否可切换和切换后页面是否可用由远端决定。
+
+识别规则是区分大小写且有界的本地分类：
+
+| Context 名称 | 分类 | 几何策略 |
+|---|---|---|
+| 精确 `NATIVE_APP` | Native | Window Rect 与 Native Element Rect 交集 |
+| 精确 `WEBVIEW` 或 `WEBVIEW_` 加非空后缀 | Web | CSS layout viewport、滚动平移后的 DOM Element Rect 交集 |
+| 其他名称 | Unknown | Context API 可读取；Find/Tap 不自动选择策略 |
+
+分类只用于选择已经设计的几何路径，不是 Runtime Discovery、Capability 或
+Driver 成功保证。客户端不根据 `automationName`、`Contexts` 返回顺序、页面源、
+窗口句柄、Bundle ID 或 Host 工具猜测 Web Context；Hybrid 中有多个 WebView
+时也不自动选择“第一个”或回退到 Native。
+
+Session 不保存 `currentContext`、Context 列表或 Context 到 Element 的绑定缓存。
+`Contexts` 与 `CurrentContext` 每次都是远端快照；`SwitchContext` 的成功只表示
+该次切换命令收到成功响应，不为后续命令建立永久本地状态。切换失败或
+`DeliveryUnknown` 时客户端不回滚、不重放，也不猜测远端是否已经改变 Context；
+调用方需要时可显式再次读取 `CurrentContext`。已有 Element 句柄不会被本地批量
+标记 stale、重新定位或绑定到新 Context；在错误 Context 中使用时由远端返回
+stale、no such element 或其他真实错误。
+
+Context 切换、页面导航、orientation、系统栏和浏览器 UI 都可能使之前的 Rect、
+viewport 或 Screenshot 快照失效。SDK 不为这些命令建立 Session 级串行器，也不
+保证 Find/Rect/Actions/Screenshot 来自同一设备帧。需要稳定状态的调用方必须在
+上层自行调度并保留命令顺序。
+
+#### 7.5.1 Hybrid 与 Safari 的验证边界
+
+Web Context 的协议设计不扩大真实环境兼容承诺。每个组合都要分别记录并验证：
+
+- Appium 3、XCUITest 或 UiAutomator2 Driver、WDA/UiAutomator2 Server 版本；
+- iOS/Android 版本、真机或模拟器、Safari/WebKit 或嵌入式 WebView/Chrome 版本；
+- WebView 调试能力、Chromedriver 与 WebView 的匹配关系、相关 capability/setting；
+- Context 列表和切换结果、CSS viewport 尺寸、页面滚动、orientation、缩放、
+  status bar/键盘状态以及 Actions 点击结果；
+- Appium Host OS、连接方式和截图采集路径。
+
+iOS Safari 和 WKWebView 可能受 Web Inspector、WDA、Safari/WebKit 版本及
+Host 条件影响；Android WebView/Chrome 可能受 UiAutomator2、Chromedriver 和
+WebView 版本匹配影响。SDK 不安装、启动或探测这些组件，也不直接调用
+`xcodebuild`、`simctl`、`adb`、`chromedriver` 或其他 Host 工具。iOS 17+ 是
+XCUITest 主线，低版本仍按 Legacy Lane；macOS、Windows、Linux 以及任何具体
+Safari/Android 版本只有在 `docs/compatibility.md` 记录真实结果后才可称为
+`Verified`。当前 DP-090 不写入任何未经实测的兼容性结论。
+
 ## 8. 坐标与视觉产物
 
-项目明确区分 WebDriver 几何、Driver 像素几何和具体图像产物：
+项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
+图像产物：
 
 ```text
 WebDriver 几何
@@ -459,6 +593,11 @@ WebDriver 几何
     Window Rect
     Element Rect
     W3C Actions
+
+Web DOM/CSS 几何
+    CSS layout viewport
+    DOM Element Rect（文档坐标，仍使用 Rect）
+    CSS viewport Rect/Point（仍使用 Rect/Point）
 
 Driver 像素几何
     PixelRect
@@ -476,7 +615,9 @@ W3C Touch Actions 的 `TouchAction` 只能由根包构造函数创建；其零�
 这些概念不能通过相同 Go 类型混用。`PixelRect` 只承载 Driver 报告的整数像素
 几何，不标识或自动绑定某一次 Screenshot 的解码像素平面。
 
-Driver 返回的 scale、status bar、orientation 等只作为坐标转换的辅助事实。没有完整且经过验证的转换模型前，SDK 不执行隐式缩放、偏移或方向修正。
+Driver 返回的 scale、status bar、orientation 等只作为事实。除 Web Context 内按
+同一快照应用 `scrollX`/`scrollY` 的 CSS 文档到 viewport 原点平移外，没有完整且
+经过验证的转换模型前，SDK 不执行隐式缩放、设备像素偏移或方向修正。
 
 `ViewportRect` 属于 Driver 像素几何，不替换 `WindowRect` 参与 Element 查找或
 Actions，也不自动成为任一 Screenshot 的 crop rectangle。
@@ -489,8 +630,10 @@ XCUITest 和 UiAutomator2 的 `mobile: viewportRect` 结果按各自 Driver 的�
 `Session.ViewportRect` 由 DP-061 通过根包统一 Execute Script 链实现；SDK 每次
 发起读取且不缓存返回值，严格校验非负原点、正面积、整数表示和端点溢出。Driver
 内部可能缓存基础屏幕事实，刷新时机以远端实现为准。该结果不会进入现有 Native
-Find/Tap，也不为 Web Context 的 DOM 几何或具体 Screenshot 像素平面提供等价
-保证；能否用于裁剪属于带环境、Context 和采集路径条件的兼容性事实。
+Find/Tap，也不为 Web Context 的 DOM/CSS 几何或具体 Screenshot 像素平面提供
+等价保证；Web Context 的 CSS layout viewport 与滚动策略已由 DP-090 在 §7.2、
+§7.3 和 `docs/coordinate-system.md` §2.3 单独定义。能否用于裁剪属于带环境、
+Context 和采集路径条件的兼容性事实。
 
 ## 9. 大型响应与二进制产物
 
@@ -883,7 +1026,6 @@ internal/bidi       BiDi 协议实现
 
 下列能力已经纳入 SDK 范围，但在实现前仍需要独立详细设计：
 
-- Web Context 下 Element 查找、Rect 和可操作性几何；
 - WebDriver BiDi 公共订阅接口及背压模型；
 - Streaming Log 与平台监控事件的公共/平台类型边界；
 - Runtime Discovery Catalog 的稳定 Go 类型。
@@ -924,6 +1066,7 @@ internal/bidi       BiDi 协议实现
 | AD-026 | Accepted | Pull Logs 对合法 UTF-8 `LogType` 使用完全开放透传（包括空字符串），非法 UTF-8 在 JSON 编码前拒绝；并使用严格标准 `LogEntry`；可用类型作为受 Driver/Capability/Context/Session 状态影响的动态快照；时间戳保留有符号 Unix 毫秒 `int64`，未知字段递归放入独立 `Extra`；每次读取有界且不缓存、不重试、不提供 Writer | 保留远端日志事实，避免把消费语义、序列化格式或持续订阅隐式加入批量读取 API |
 | AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
+| AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW` 或带非空后缀的 `WEBVIEW_` 选择已定义几何策略；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

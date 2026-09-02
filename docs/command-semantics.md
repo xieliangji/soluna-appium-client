@@ -63,6 +63,85 @@ GET 每次读取远端并返回独立的深拷贝。UpdateSettings 的外层请�
 GET 的成功 value 必须是 JSON object（包括空对象）；其他类型或非法 JSON
 返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Session Context（DP-090 设计契约，待 DP-091 实现）
+
+Context API 只使用根包 `Session`，并通过 Appium 3 标准 Context 路由读取或切换
+当前远端 Context：
+
+| API | HTTP | 路径 | 请求体 | 成功 value |
+|---|---|---|---|---|
+| `Session.Contexts` | GET | `/session/{sessionId}/contexts` | 无 | JSON string 数组，解码为 `[]string` |
+| `Session.CurrentContext` | GET | `/session/{sessionId}/context` | 无 | JSON string |
+| `Session.SwitchContext` | POST | `/session/{sessionId}/context` | `{"name":"<context>"}` | `null` |
+
+GET 请求不带 body，也不发送 `Content-Type`；POST 始终发送只含 `name` 字段的
+JSON object。Session ID 按统一 Endpoint 规则作为独立路径段转义。每次方法调用
+只发送一次对应请求，不隐式先读取 Context 列表、Discovery、Healthy 或
+Window Rect；Context 命令使用普通命令响应上限，不新增 Context 专用资源配额，
+也不自动重试、回退或恢复页面状态。
+
+`Contexts` 的成功 value 必须是 JSON string array。数组顺序和重复项按远端保留，
+空数组返回非 nil 空 slice；`null`、object、字符串或数组中的非 string 项均为
+`CodeResponseInvalid`。所有 JSON string 都必须能严格解码为有效 UTF-8（包括
+surrogate 校验）。`CurrentContext` 的成功 value 必须是 JSON string（空字符串也
+按远端字符串事实保留），不能是 `null` 或其他 JSON 类型。
+`SwitchContext` 的参数按调用方提供的确切 UTF-8 字符串编码，非法 UTF-8 在发送前
+返回 `CodeInvalidArgument`/`DeliveryNotSent`；空字符串、大小写差异和未知名称不
+在 SDK 内预先拒绝，由远端决定是否存在或可切换。成功 value 必须严格为 JSON
+`null`。
+
+三条命令的成功响应都必须先通过统一 W3C/Appium envelope 解码，再按上述 value
+契约解码；收到 envelope 后的任何格式错误均为 `DeliveryAcknowledged`，不返回
+部分 Context 快照。
+
+Context 名称的本地几何分类区分大小写：精确 `NATIVE_APP` 为 Native，精确
+`WEBVIEW` 或带非空后缀的 `WEBVIEW_` 为 Web，其他名称为 Unknown。该分类只
+选择 `docs/coordinate-system.md` 与 `docs/design.md` 已定义的几何路径，不是
+Runtime Discovery 或能力成功保证。Context-sensitive Element Find/Tap 先使用一次
+当前 Context 快照来选择路径，再发送候选查找或几何命令；客户端不缓存 current Context，不从列表顺序、
+Capability、页面源或 Host 工具推测，也不在 Unknown Context 下隐式使用另一种
+路径。Unknown Context 在该快照成功后即返回 `CodeUnsupported`，不发送候选查找、
+几何探针或 Actions。Native/Web 的 Context-sensitive Find/Tap 都会为这次策略
+选择增加该 `CurrentContext` 请求；直接的 Element Rect 命令不因 Context 类型而
+增加该快照。Context 快照与
+后续元素查找、Rect、viewport 探针和 Actions 不是原子事务；
+竞争或页面滚动时沿用各底层命令的真实结果。
+
+Web Context 的 Element Rect 使用 CSS pixel；按 WebDriver 契约，`x`/`y` 是文档
+元素坐标，先减去同一次 viewport 探针取得的 `scrollX`/`scrollY`，再与由
+`window.innerWidth`/`window.innerHeight` 形成的 layout viewport 做正面积交集；
+不使用 Native `WindowRect`、`ViewportRect`、devicePixelRatio 或 Screenshot 像素。
+Web 元素点击在平移后的交集内选择整数 CSS viewport 坐标并复用既有 W3C Actions；
+不自动滚动、Element Click、JavaScript click、stale 重定位或 Context fallback。
+Native Find/Tap 的既有 Window Rect 交集和 Actions 语义保持不变。
+
+`SwitchContext` 收到成功响应只表示该次远端命令成功，不建立可长期信任的本地
+current-context 状态；失败或 `DeliveryUnknown` 时不回滚、不重放，也不猜测远端
+是否已经切换。已有 Element 句柄不因切换被本地批量失效或重新绑定，后续错误由
+远端按 stale、no such element 或其他命令事实返回。
+
+Web 几何使用一个内部、固定脚本的 viewport 探针，不新增公开的 Web viewport
+方法或 Raw Command：
+
+```text
+POST /session/{sessionId}/execute/sync
+script: "return {scrollX: window.scrollX, scrollY: window.scrollY, width: window.innerWidth, height: window.innerHeight}"
+args:   []
+operation: get_web_viewport
+```
+
+该 Execute Script 请求必须进入根包统一执行链；成功 value 必须是包含有限的
+`scrollX`/`scrollY`、有限且为正的 `width`/`height` 的对象，且
+`scrollX + width`、`scrollY + height` 仍须是有限值。`scrollX`/`scrollY` 是
+文档坐标系中当前 layout viewport 左上角的 CSS pixel 偏移，不因暂时的负值、
+RTL 或 Driver 的滚动实现而被客户端 clamp。该对象只在已识别 Web Context 的
+Context-sensitive Find/Tap 中按需读取一次；客户端据此构造原点为零的 viewport
+Rect；平移任一候选 Rect 后若坐标或端点不再是有限值，整个操作同样返回响应
+格式错误，不返回部分结果。不缓存，不读取 `ViewportRect`、Window Rect 或 Host
+工具。固定脚本返回的未知字段不参与几何计算。响应格式错误按
+`CodeResponseInvalid`/`DeliveryAcknowledged` 处理；脚本、传输或 Context 竞争
+错误沿用统一命令语义，且不返回部分元素或发送后续动作。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下

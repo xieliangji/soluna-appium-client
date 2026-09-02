@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-081`（已完成；下一项需显式选择）
-> 最后更新：2026-08-31
+> 当前计划项：`DP-090`（已完成；下一项需显式选择）
+> 最后更新：2026-09-01
 
 ## Agent 执行约束
 
@@ -33,7 +33,7 @@
 | 11 | `DP-071` Element 显式等待 | `WAIT-002` | Done | DP-070 |
 | 12 | `DP-080` Pull Logs 设计 | `LOG-001..002` | Done | — |
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Done | DP-080 |
-| 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Queued | — |
+| 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Done | — |
 | 15 | `DP-091` Context API 实现 | `CTX-001` | Queued | DP-090 |
 | 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Queued | — |
 | 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Queued | DP-100 |
@@ -250,13 +250,26 @@ Driver 消费语义和兼容性仍未验证。
 - Context 切换后的本地状态；
 - Hybrid/Safari 的版本和 Host 验证边界。
 
+已完成 Web Context 几何设计：Context 名称按不透明 UTF-8 快照保留，仅精确
+`NATIVE_APP`、`WEBVIEW` 或带非空后缀的 `WEBVIEW_` 进入已定义的 Native/Web
+策略，其他名称保持 Unknown，不触发隐式 fallback。Native 继续使用
+`WindowRect` 与 Element Rect 的 WebDriver 交集；Web 使用由
+`window.scrollX`/`window.scrollY`/`window.innerWidth`/`window.innerHeight` 定义的
+CSS layout viewport，将 WebDriver 文档相对 DOM Element Rect 平移到 viewport
+坐标后计算正面积交集，不做 CSS/device-pixel、status bar、orientation 或
+`PixelRect` 转换。Find/Tap 不自动滚动、点击
+fallback、iframe 遍历或 stale 重定位；Context 列表、当前 Context 和切换不缓存，
+切换结果不推测后续本地状态。已记录 Appium 3、XCUITest/Safari/WKWebView、
+UiAutomator2/Android WebView、Driver/WDA/Chromedriver、设备 OS、真机/模拟器和
+Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatibility.md`。
+
 排除运行时代码。
 
 ### DP-091 Context API 实现
 
 - 实现 Context 列表、当前 Context 和切换。
-- 严格解码；切换失败不推测本地状态。
-- 保持 Native 行为，实现 DP-090 的 Web 几何策略。
+- 按 DP-090 固定的 Appium 3 路由严格解码；切换失败或投递不确定时不推测本地状态。
+- 保持 Native 行为，实现 DP-090 的 Web CSS viewport/DOM Rect 几何策略。
 - 排除自动 Context fallback 和未设计的 Hybrid 发现。
 
 ### DP-100 Keyboard 语义设计

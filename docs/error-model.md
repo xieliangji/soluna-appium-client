@@ -39,6 +39,49 @@ Appium 3 的读取结果只建模 `command` 和 `implicit`，不推断 `script` 
 `CodeInvalidArgument`，Delivery 为 `DeliveryNotSent`；远端返回非 null 成功值时
 同样返回 `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`。
 
+## Context 与 Web 几何错误
+
+`Session.Contexts`、`Session.CurrentContext` 和 `Session.SwitchContext` 使用
+Appium 3 标准 Context 命令，并复用统一的 Error/Delivery 映射：
+
+- `Contexts` 的成功 value 必须是 JSON string array；顶层 `null`、错误类型、
+  非 string 数组项或无法严格解码为有效 UTF-8 的 JSON string，以及
+  `CurrentContext` 的 `null`/非 string value，返回 `CodeResponseInvalid`，Delivery
+  为 `DeliveryAcknowledged`，不返回部分结果；
+- `SwitchContext` 的成功 value 必须严格为 JSON `null`。调用方提供的 Context
+  名称按原始 UTF-8 字符串发送；非法 UTF-8 在编码前返回
+  `CodeInvalidArgument`/`DeliveryNotSent`，空字符串或未知名称不在本地建立白名单，
+  由远端返回实际命令错误；
+- 远端 `no such context`、Driver 不支持 Context 或切换失败沿用通用远端命令
+  错误和 `DeliveryAcknowledged`，不新增 Context 专用错误码，也不自动回退到
+  `NATIVE_APP` 或其他 Web Context；
+- `SwitchContext` 在 `DeliveryUnknown` 时不更新或推测本地状态；调用方可显式
+  读取 `CurrentContext`，客户端不重放切换请求。
+
+Context 名称只有精确 `NATIVE_APP`、精确 `WEBVIEW` 或带非空后缀的 `WEBVIEW_`
+才进入已经定义的 Native/Web 几何策略。Unknown Context 下的
+Context-sensitive Element Find/Tap 在完成 Context 快照后，若分类为 Unknown，立即
+返回 `CodeUnsupported`，不发送候选查找、几何探针或动作命令；不把该结果伪装成
+Element Not Found，也不使用另一种几何 fallback。Context
+探针、元素查找、Rect、CSS viewport 探针和 Actions 是独立命令；其中任一命令
+失败都按其自身的 Operation、StatusCode、Delivery 和 Cause 返回，不交付部分
+元素结果。Unknown 分类若来自已成功的 `CurrentContext` 探针，组合 API 返回的
+`CodeUnsupported` 保留该探针已确认的 `DeliveryAcknowledged`，但这只说明
+Context 探针已收到响应，不表示 Find 或 Tap 的后续命令已发送；未发送的后续请求
+不另造或伪造 Delivery 状态。直接调用 `Element.Rect` 不执行 Context 分类探针，
+其错误只反映该 Rect 命令自身的投递事实。
+
+Web 几何响应必须能在统一 Execute Script decoder 中解码为包含有限
+`scrollX`/`scrollY`、正面积 `width`/`height` 的 CSS layout viewport，并将
+WebDriver 文档相对 `Element.Rect` 减去同一滚动快照后，在同一 CSS pixel 空间计算
+正面积交集。Native/Web 的 Context-sensitive Find/Tap 都先发送一次
+`CurrentContext` 命令；其失败直接沿用该命令的错误和 Delivery。viewport/Rect
+格式错误返回 `CodeResponseInvalid`、
+`DeliveryAcknowledged`；页面滚动、缩放、DOM 重排或 Context 竞争不产生专用
+错误，客户端不自动滚动、重试、JavaScript click、Element Click、stale 重定位
+或 CSS/device-pixel 转换。Native Find/Tap 的既有 Window Rect 交集和错误语义
+保持不变。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与
