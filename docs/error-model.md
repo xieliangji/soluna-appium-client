@@ -87,7 +87,7 @@ WebDriver 文档相对 `Element.Rect` 减去同一滚动快照后，在同一 CS
 或 CSS/device-pixel 转换。Native Find/Tap 的既有 Window Rect 交集和错误语义
 保持不变。
 
-## Keyboard 错误（DP-100 设计契约，待 DP-101 实现）
+## Keyboard 错误（DP-101 已实现）
 
 `Session.KeyboardShown` 与 `Session.DismissKeyboard` 使用 Appium 3 common
 keyboard routes，并沿用统一的 Error/Delivery 映射。键盘能力不增加专用
@@ -114,7 +114,7 @@ keyboard routes，并沿用统一的 Error/Delivery 映射。键盘能力不增�
   重试、缓存、切换 Context 或管理 IME；Driver 内部的 Done/ESC/BACK 也可能产生
   提交、Return、导航或其他应用副作用，SDK 不承诺应用状态只发生键盘变化。
 
-DP-101 必须在统一 `executeCommand` 的 response decoder slot 中严格区分 JSON
+Keyboard 实现必须在统一 `executeCommand` 的 response decoder slot 中严格区分 JSON
 `true`/`false` 与 `null`、数字、字符串、对象、数组，并在
 `Observer.OnCommandFinished` 之前执行校验。应使用 `json.RawMessage` 类型检查或
 带显式 nil 检查的 `*bool`；直接解码到 Go `bool` 会把 `null` 的零值误当作合法

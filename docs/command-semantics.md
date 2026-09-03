@@ -148,7 +148,7 @@ Rect；平移任一候选 Rect 后若坐标或端点不再是有限值，整个�
 `CodeResponseInvalid`/`DeliveryAcknowledged` 处理；脚本、传输或 Context 竞争
 错误沿用统一命令语义，且不返回部分元素或发送后续动作。
 
-## Session Keyboard（DP-100 设计契约，待 DP-101 实现）
+## Session Keyboard（DP-101 已实现）
 
 Keyboard 能力只面向当前 Driver 的软键盘状态快照和一次关闭请求。公共入口属于
 根包 `Session`：
@@ -184,7 +184,7 @@ Driver 的 ESC/BACK 可能触发 Return/提交、导航、对话框关闭或其�
 只承诺发起一次 Driver 请求并交付其响应，不承诺应用状态只发生键盘变化；键盘状态
 竞争时也不提供回滚或副作用隔离。
 
-DP-101 的响应 decoder 必须在统一 `executeCommand` 的 decoder slot 中运行，并在
+Keyboard 实现的响应 decoder 在统一 `executeCommand` 的 decoder slot 中运行，并在
 `Observer.OnCommandFinished` 之前完成。`true`、`false` 是唯一合法成功 token；必须
 显式区分 `null`、数字、字符串、对象和数组（使用 `json.RawMessage` 类型检查，或
 带 nil 检查的 `*bool`，不能直接把响应解码到 `bool` 以免 `null` 被当作 false）。

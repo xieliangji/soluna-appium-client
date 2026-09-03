@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-100`（已完成；下一项需显式选择）
+> 当前计划项：`DP-101`（已完成；下一项需显式选择）
 > 最后更新：2026-09-03
 
 ## Agent 执行约束
@@ -36,7 +36,7 @@
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Done | — |
 | 15 | `DP-091` Context API 实现 | `CTX-001` | Done | DP-090 |
 | 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Done | — |
-| 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Queued | DP-100 |
+| 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Done | DP-100 |
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Queued | — |
 | 19 | `DP-111` 屏幕方向 | `NAV-002` | Queued | — |
 | 20 | `DP-120` 活动 App ID | `DEV-001` | Queued | — |
@@ -297,7 +297,7 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 - 记录 XCUITest 与 UiAutomator2 的状态探测、关闭实现和布尔返回差异；严格校验
   Driver boolean 并原样返回，但不把关闭响应包装成跨 Driver 的确定事实；
 - 明确无特殊键/strategy、Back 或其他 fallback，且不管理 IME、Context 或关闭按钮；
-- DP-101 仍待实现运行时代码、协议回归测试和真实兼容性验证。
+- DP-101 已完成运行时代码和协议回归测试；真实兼容性验证仍待记录。
 
 ### DP-101 Keyboard 实现
 
@@ -316,8 +316,17 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 - 当前 Appium 3.6.0/XCUITest Driver 12.1.0 的 common `hide_keyboard` route 仍存在
   但已 deprecated；若后续移除或拒绝该 route，只返回统一远端 unsupported/command
   error，不增加 `mobile:` 或平台内部 fallback。真实版本范围和设备结果写入
-  `docs/compatibility.md`，不改变能力矩阵的 `Accepted` / `None` 状态。
+  `docs/compatibility.md`；当前能力矩阵状态为 `Implemented` / `Protocol`，真实
+  版本与设备验证仍需单独记录。
 - 排除自动输入恢复和 IME 管理。
+
+已完成根包 Keyboard 实现和协议回归测试：`KeyboardShown` 与 `DismissKeyboard`
+通过统一 HTTP 执行链发送精确的 Appium common routes，分别使用
+`keyboard_shown` 与 `dismiss_keyboard` 作为 Error/Observer identity；GET 不带
+请求体，POST 固定发送 `{}`。成功 value 严格限制为 JSON boolean，显式拒绝
+`null`、数字、字符串、对象和数组，并在 Observer Finished 之前完成 decoder 校验。
+实现不缓存、不重试、不 fallback、不管理 IME；真实 Driver、设备和 Host 组合仍未
+验证，兼容性结果须单独写入 `docs/compatibility.md`。
 
 ### DP-110 应用放入后台
 

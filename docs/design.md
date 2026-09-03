@@ -597,11 +597,11 @@ Safari/Android 版本只有在 `docs/compatibility.md` 记录真实结果后才�
 
 ### 7.6 Keyboard 状态与关闭请求（DP-100）
 
-DP-100 只定义根包 `Session` 上的键盘语义，DP-101 才加入运行时代码。这里的
+DP-100 定义根包 `Session` 上的键盘语义，DP-101 已加入运行时代码。这里的
 Keyboard 仅指当前 Driver 能观察或尝试关闭的软键盘；它不等同于 IME 的安装、选择
 或配置，也不覆盖硬件键盘、文本输入、特殊键发送或截图像素中的键盘区域。
 
-目标公共入口为：
+已实现的公共入口为：
 
 ```go
 func (s *Session) KeyboardShown(ctx context.Context) (bool, error)
@@ -694,8 +694,8 @@ Driver 关闭请求并报告其响应，不承诺应用状态只发生键盘变�
   Session。`DeliveryUnknown` 时不重放关闭请求，也不猜测远端是否已经执行。
 
 真实 Appium、Driver、WDA/UiAutomator2 Server、设备 OS、设备类型和 Host 组合仍
-需单独记录在 `docs/compatibility.md`；DP-100 不产生 `Protocol` 或 `Verified`
-证据。
+需单独记录在 `docs/compatibility.md`；DP-101 已产生协议测试证据，但尚未产生
+`Verified` 证据。
 
 ## 8. 坐标与视觉产物
 
