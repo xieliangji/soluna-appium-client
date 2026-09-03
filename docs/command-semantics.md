@@ -196,6 +196,36 @@ Keyboard 实现的响应 decoder 在统一 `executeCommand` 的 decoder slot 中
 输入法服务状态，并可能在 Driver 内部使用平台按键和等待。上述内部差异不改变
 本 SDK 的路由和返回契约，真实版本组合仍需兼容性验证。
 
+## Session Background App（DP-110 已实现）
+
+`Session.BackgroundApp` 只请求把当前 App 放入后台，不接受 App ID 或定时时长：
+
+| API | HTTP | 路径 | 请求体 | 成功 value |
+|---|---|---|---|---|
+| `Session.BackgroundApp` | POST | `/session/{sessionId}/appium/app/background` | `{"seconds":-1}` | JSON `null` 或 `true` |
+
+请求始终发送只含 `seconds` 的 JSON object 并设置 `Content-Type: application/json`；
+Session ID 按统一 Endpoint 规则作为独立路径段转义。固定负数 `-1` 使用两个目标
+Driver 都定义的“不恢复”分支。特别是不发送 `null`：当前 Android Driver 会把该值
+走成零秒等待并重新激活 App，不满足本能力边界。
+
+XCUITest 的无恢复路径当前可返回 JSON `null`，UiAutomator2 当前可返回 JSON
+`true`。公共方法不暴露该 Driver 实现差异，但 response decoder 必须在统一
+`executeCommand` 链中、Observer Finished 之前严格接受这两个 token；`false`、
+数字、字符串、object 或 array 都返回 `CodeResponseInvalid` /
+`DeliveryAcknowledged`。`true` 只是一种已接受的 Driver 成功 value，不被 SDK
+提升为后台最终状态断言。
+
+每次调用只发送一次 background 请求，固定 Error/Observer identity 为
+`background_app`。客户端不预读或后读 `AppState`、Context、Discovery 或 Healthy，
+不缓存前后台状态，也不自动调用 `ActivateApp`。成功响应与设备实际状态之间仍可能
+发生竞争；需要恢复时调用方显式执行 `ActivateApp`，需要确认时显式读取 `AppState`。
+
+当前两个目标 Driver 仍注册该 common route，但已将其标记 deprecated。远端移除、
+拒绝或不支持时沿用统一远端错误，不自动改走 `mobile: backgroundApp`、WDA、
+UiAutomator2 Server、Host 工具或通用 Back。传输结果为 `DeliveryUnknown` 时不重放
+请求，也不推测 App 是否已经进入后台；不提供定时恢复、后台计时器或状态恢复任务。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下
