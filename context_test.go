@@ -150,7 +150,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "contexts null",
 			method:   http.MethodGet,
-			uri:      "/session/session/contexts",
+			uri:      "/session/session%2Fid/contexts",
 			response: `null`,
 			invoke: func(session *appium.Session) error {
 				contexts, err := session.Contexts(context.Background())
@@ -163,7 +163,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "contexts object",
 			method:   http.MethodGet,
-			uri:      "/session/session/contexts",
+			uri:      "/session/session%2Fid/contexts",
 			response: `{}`,
 			invoke: func(session *appium.Session) error {
 				_, err := session.Contexts(context.Background())
@@ -173,8 +173,21 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "contexts non-string item",
 			method:   http.MethodGet,
-			uri:      "/session/session/contexts",
+			uri:      "/session/session%2Fid/contexts",
 			response: `["NATIVE_APP",1]`,
+			invoke: func(session *appium.Session) error {
+				contexts, err := session.Contexts(context.Background())
+				if contexts != nil {
+					t.Fatalf("invalid contexts returned partial result: %#v", contexts)
+				}
+				return err
+			},
+		},
+		{
+			name:     "contexts null item",
+			method:   http.MethodGet,
+			uri:      "/session/session%2Fid/contexts",
+			response: `["NATIVE_APP",null]`,
 			invoke: func(session *appium.Session) error {
 				contexts, err := session.Contexts(context.Background())
 				if contexts != nil {
@@ -186,7 +199,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "contexts unpaired surrogate",
 			method:   http.MethodGet,
-			uri:      "/session/session/contexts",
+			uri:      "/session/session%2Fid/contexts",
 			response: `["\ud800"]`,
 			invoke: func(session *appium.Session) error {
 				_, err := session.Contexts(context.Background())
@@ -196,7 +209,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "current context null",
 			method:   http.MethodGet,
-			uri:      "/session/session/context",
+			uri:      "/session/session%2Fid/context",
 			response: `null`,
 			invoke: func(session *appium.Session) error {
 				_, err := session.CurrentContext(context.Background())
@@ -206,7 +219,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "current context array",
 			method:   http.MethodGet,
-			uri:      "/session/session/context",
+			uri:      "/session/session%2Fid/context",
 			response: `[]`,
 			invoke: func(session *appium.Session) error {
 				_, err := session.CurrentContext(context.Background())
@@ -216,7 +229,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "current context unpaired surrogate",
 			method:   http.MethodGet,
-			uri:      "/session/session/context",
+			uri:      "/session/session%2Fid/context",
 			response: `"\udfff"`,
 			invoke: func(session *appium.Session) error {
 				_, err := session.CurrentContext(context.Background())
@@ -226,7 +239,7 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 		{
 			name:     "switch context non-null",
 			method:   http.MethodPost,
-			uri:      "/session/session/context",
+			uri:      "/session/session%2Fid/context",
 			response: `{}`,
 			invoke: func(session *appium.Session) error {
 				return session.SwitchContext(context.Background(), "WEBVIEW_app")
@@ -258,8 +271,18 @@ func TestSessionContextCommandsRejectInvalidSuccessValues(t *testing.T) {
 			if delivery := appium.DeliveryOf(err); delivery != appium.DeliveryAcknowledged {
 				t.Fatalf("delivery = %q, want %q", delivery, appium.DeliveryAcknowledged)
 			}
-			if requests := recorder.Requests(); len(requests) != 1 {
+			requests := recorder.Requests()
+			if len(requests) != 1 {
 				t.Fatalf("request count = %d, want 1", len(requests))
+			}
+			if requests[0].Method != test.method || requests[0].RequestURI != test.uri {
+				t.Fatalf(
+					"request = %s %s, want %s %s",
+					requests[0].Method,
+					requests[0].RequestURI,
+					test.method,
+					test.uri,
+				)
 			}
 		})
 	}

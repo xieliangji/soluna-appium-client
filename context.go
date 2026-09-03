@@ -124,7 +124,7 @@ func (s *Session) CurrentContext(ctx context.Context) (string, error) {
 		client.commandTimeout,
 		client.limits.MaxResponseBytes,
 		func(ctx context.Context, value json.RawMessage) error {
-			decoded, decodeErr := codec.DecodeJSONString(ctx, value)
+			decoded, decodeErr := decodeRequiredContextString(ctx, value)
 			if decodeErr != nil {
 				return decodeErr
 			}
@@ -338,7 +338,7 @@ func decodeContexts(
 			return nil, err
 		}
 
-		name, err := codec.DecodeJSONString(ctx, raw)
+		name, err := decodeRequiredContextString(ctx, raw)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"decode context at index %d: %w",
@@ -354,6 +354,27 @@ func decodeContexts(
 	}
 
 	return contexts, nil
+}
+
+// decodeRequiredContextString 严格解码必需的 JSON Context 字符串。
+//
+// encoding/json 将显式 null 解码到 string 变量时视为零值，因此这里先单独
+// 拒绝 null，再复用 codec 的 UTF-8、JSON 语法和 surrogate 校验。
+func decodeRequiredContextString(
+	ctx context.Context,
+	raw json.RawMessage,
+) (string, error) {
+	if ctx == nil {
+		return "", errors.New("context is nil")
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	if bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return "", errors.New("context value must be a JSON string")
+	}
+
+	return codec.DecodeJSONString(ctx, raw)
 }
 
 // decodeWebViewport 严格解码固定脚本返回的 CSS layout viewport 快照。
