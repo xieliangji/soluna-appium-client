@@ -331,20 +331,22 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 ### DP-110 应用放入后台
 
 - 实现根包 `Session.BackgroundApp`，只放入当前 App 后台且不自动恢复。
-- 使用 Appium common `POST /session/{sessionId}/appium/app/background` route，
-  固定发送 `{"seconds":-1}`；不接受定时时长，也不以 `null` 表达无恢复。
+- 使用 Appium 3 正式 `mobile: backgroundApp` Execute Method，通过固定的
+  `POST /session/{sessionId}/execute/sync` 发送
+  `{"script":"mobile: backgroundApp","args":[{"seconds":-1}]}`；不接受定时时长，
+  也不以 `null` 表达无恢复。
 - 固定 Error/Observer identity 为 `background_app`，成功 value 严格接受目标
-  Driver 当前返回的 JSON `null` 或 `true`，其他类型按响应格式错误处理。
-- 覆盖 XCUITest 与 UiAutomator2 请求/成功响应、Session ID 路径转义、远端
-  unsupported、响应格式错误、请求前取消和 `DeliveryUnknown` 不重放。
+  Execute Method 的 JSON `null`，其他类型按响应格式错误处理。
+- 覆盖 XCUITest 与 UiAutomator2 请求/成功响应、Execute Script 请求体、Session ID
+  路径转义、远端 unsupported、响应格式错误、请求前取消和 `DeliveryUnknown` 不重放。
 - 恢复由现有 `ActivateApp` 显式执行。
-- common route 被 Driver 移除或拒绝时只返回统一远端错误，不增加 `mobile:`、
-  Driver 内部端点或 Host 工具 fallback。
+- Execute Method 被 Driver 移除或拒绝时只返回统一远端错误，不回退到 deprecated
+  HTTP compatibility route、Driver 内部端点或 Host 工具。
 - 排除定时恢复、自动状态确认和通用 Back。
 
 已完成根包 Background App 实现和协议回归测试。每次调用只通过统一 HTTP 执行链
-发送一次固定负数 `seconds` 的 Appium common background 请求；客户端不读取或缓存
-App 状态，不调度恢复、不重试也不 fallback。当前能力矩阵状态为
+发送一次固定负数 `seconds` 的 Appium `mobile: backgroundApp` Execute Method 请求；
+客户端不读取或缓存 App 状态，不调度恢复、不重试也不 fallback。当前能力矩阵状态为
 `Implemented` / `Protocol`；真实 Driver、设备与 Host 组合仍未验证，兼容性结果须
 单独写入 `docs/compatibility.md`。
 

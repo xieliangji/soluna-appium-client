@@ -198,33 +198,34 @@ Keyboard 实现的响应 decoder 在统一 `executeCommand` 的 decoder slot 中
 
 ## Session Background App（DP-110 已实现）
 
-`Session.BackgroundApp` 只请求把当前 App 放入后台，不接受 App ID 或定时时长：
+`Session.BackgroundApp` 只请求把当前 App 放入后台，不接受 App ID 或定时时长，使用
+Appium 3 正式的 `mobile: backgroundApp` Execute Method：
 
 | API | HTTP | 路径 | 请求体 | 成功 value |
 |---|---|---|---|---|
-| `Session.BackgroundApp` | POST | `/session/{sessionId}/appium/app/background` | `{"seconds":-1}` | JSON `null` 或 `true` |
+| `Session.BackgroundApp` | POST | `/session/{sessionId}/execute/sync` | `{"script":"mobile: backgroundApp","args":[{"seconds":-1}]}` | JSON `null` |
 
-请求始终发送只含 `seconds` 的 JSON object 并设置 `Content-Type: application/json`；
-Session ID 按统一 Endpoint 规则作为独立路径段转义。固定负数 `-1` 使用两个目标
-Driver 都定义的“不恢复”分支。特别是不发送 `null`：当前 Android Driver 会把该值
-走成零秒等待并重新激活 App，不满足本能力边界。
+请求始终使用固定的 W3C Execute Script 路由并设置 `Content-Type: application/json`；
+Session ID 按统一 Endpoint 规则作为独立路径段转义。`args` 是包含一个参数 object
+的 JSON array，`seconds=-1` 使用 XCUITest 与 Android Driver 都定义的“不恢复”分支。
+特别是不发送 `null`：Android Driver 会将其转换为零秒等待并重新激活 App，不满足
+本能力边界。
 
-XCUITest 的无恢复路径当前可返回 JSON `null`，UiAutomator2 当前可返回 JSON
-`true`。公共方法不暴露该 Driver 实现差异，但 response decoder 必须在统一
-`executeCommand` 链中、Observer Finished 之前严格接受这两个 token；`false`、
-数字、字符串、object 或 array 都返回 `CodeResponseInvalid` /
-`DeliveryAcknowledged`。`true` 只是一种已接受的 Driver 成功 value，不被 SDK
+每次调用只发送一次 Execute Method 请求，固定 Error/Observer identity 为
+`background_app`。成功 value 严格为 JSON `null`，由统一
+`ExecuteScriptWithOperationAndDecode` decoder 在 Observer Finished 之前校验；
+`true`、`false`、数字、字符串、object 或 array 都返回 `CodeResponseInvalid` /
+`DeliveryAcknowledged`。成功只表示 Execute Method 请求得到成功响应，不被 SDK
 提升为后台最终状态断言。
 
-每次调用只发送一次 background 请求，固定 Error/Observer identity 为
-`background_app`。客户端不预读或后读 `AppState`、Context、Discovery 或 Healthy，
-不缓存前后台状态，也不自动调用 `ActivateApp`。成功响应与设备实际状态之间仍可能
-发生竞争；需要恢复时调用方显式执行 `ActivateApp`，需要确认时显式读取 `AppState`。
+客户端不预读或后读 `AppState`、Context、Discovery 或 Healthy，不缓存前后台状态，
+也不自动调用 `ActivateApp`。成功响应与设备实际状态之间仍可能发生竞争；需要恢复
+时调用方显式执行 `ActivateApp`，需要确认时显式读取 `AppState`。
 
-当前两个目标 Driver 仍注册该 common route，但已将其标记 deprecated。远端移除、
-拒绝或不支持时沿用统一远端错误，不自动改走 `mobile: backgroundApp`、WDA、
-UiAutomator2 Server、Host 工具或通用 Back。传输结果为 `DeliveryUnknown` 时不重放
-请求，也不推测 App 是否已经进入后台；不提供定时恢复、后台计时器或状态恢复任务。
+Execute Method 不可用、被拒绝或远端返回 unsupported 时沿用统一远端错误，不自动
+切换到 deprecated `/appium/app/background` compatibility route、WDA、UiAutomator2
+Server、Host 工具或通用 Back。传输结果为 `DeliveryUnknown` 时不重放请求，也不推测
+App 是否已经进入后台；不提供定时恢复、后台计时器或状态恢复任务。
 
 ## Session Pull Logs（DP-081 已实现）
 

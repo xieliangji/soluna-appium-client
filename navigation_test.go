@@ -11,21 +11,18 @@ import (
 	"github.com/xieliangji/soluna-appium-client/contracttest"
 )
 
-func TestDP110BackgroundAppSendsNoRestoreBackgroundCommand(t *testing.T) {
+func TestDP110BackgroundAppSendsNoRestoreExecuteMethod(t *testing.T) {
 	for _, test := range []struct {
 		name           string
 		automationName string
-		response       string
 	}{
 		{
-			name:           "XCUITest null response",
+			name:           "XCUITest",
 			automationName: "XCUITest",
-			response:       "null",
 		},
 		{
-			name:           "UiAutomator2 true response",
+			name:           "UiAutomator2",
 			automationName: "UiAutomator2",
-			response:       "true",
 		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -38,13 +35,13 @@ func TestDP110BackgroundAppSendsNoRestoreBackgroundCommand(t *testing.T) {
 					request *http.Request,
 				) {
 					if request.Method != http.MethodPost ||
-						request.RequestURI != "/session/session%2Fid/appium/app/background" {
+						request.RequestURI != "/session/session%2Fid/execute/sync" {
 						http.NotFound(writer, request)
 						return
 					}
 
 					writer.Header().Set("Content-Type", "application/json")
-					_, _ = writer.Write([]byte(`{"value":` + test.response + `}`))
+					_, _ = writer.Write([]byte(`{"value":null}`))
 				}),
 			)
 
@@ -62,13 +59,18 @@ func TestDP110BackgroundAppSendsNoRestoreBackgroundCommand(t *testing.T) {
 			}
 			if err := contracttest.MatchRequestURI(
 				request,
-				"/session/session%2Fid/appium/app/background",
+				"/session/session%2Fid/execute/sync",
 			); err != nil {
 				t.Fatal(err)
 			}
 			if err := contracttest.MatchJSONBody(
 				request,
-				map[string]any{"seconds": int64(-1)},
+				map[string]any{
+					"script": "mobile: backgroundApp",
+					"args": []any{
+						map[string]any{"seconds": int64(-1)},
+					},
+				},
 			); err != nil {
 				t.Fatal(err)
 			}
@@ -83,11 +85,12 @@ func TestDP110BackgroundAppSendsNoRestoreBackgroundCommand(t *testing.T) {
 	}
 }
 
-func TestDP110BackgroundAppRejectsUnexpectedSuccessValues(t *testing.T) {
+func TestDP110BackgroundAppRejectsNonNullSuccessValues(t *testing.T) {
 	for _, test := range []struct {
 		name     string
 		response string
 	}{
+		{name: "true", response: "true"},
 		{name: "false", response: "false"},
 		{name: "number", response: "-1"},
 		{name: "string", response: `"true"`},
@@ -188,7 +191,7 @@ func TestDP110BackgroundAppRemoteFailureDoesNotFallback(t *testing.T) {
 			writer.Header().Set("Content-Type", "application/json")
 			writer.WriteHeader(http.StatusNotFound)
 			_, _ = writer.Write([]byte(
-				`{"value":{"error":"unknown command","message":"background route unavailable"}}`,
+				`{"value":{"error":"unknown command","message":"background execute method unavailable"}}`,
 			))
 		}),
 	)
@@ -222,7 +225,7 @@ func TestDP110BackgroundAppUnknownDeliveryIsNotReplayed(t *testing.T) {
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			calls.Add(1)
 			if request.Method != http.MethodPost ||
-				request.RequestURI != "/session/session%2Fid/appium/app/background" {
+				request.RequestURI != "/session/session%2Fid/execute/sync" {
 				http.NotFound(writer, request)
 				return
 			}

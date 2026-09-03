@@ -124,13 +124,15 @@ Keyboard 实现必须在统一 `executeCommand` 的 response decoder slot 中严
 ## Background App 错误（DP-110 已实现）
 
 `Session.BackgroundApp` 使用 `background_app` 作为固定的 Error 和 Observer
-operation identity，并沿用统一 Error/Delivery 映射，不增加专用 `ErrorCode`：
+operation identity，通过固定的 `mobile: backgroundApp` Execute Method 进入统一
+Error/Delivery 映射，不增加专用 `ErrorCode`：
 
-- 成功 value 只接受目标 Driver 当前使用的 JSON `null` 或 `true`；其他 JSON
+- 成功 value 只接受 Execute Method 的 JSON `null`；`true`、`false` 或其他 JSON
   类型返回 `CodeResponseInvalid` / `DeliveryAcknowledged`，decoder 在 Observer
   Finished 之前完成；
 - 远端 `unknown command`、`unsupported operation` 或其他 Driver 命令失败使用
-  通用远端映射，不按 AutomationName 本地拦截，也不切换 route 或执行 fallback；
+  通用远端映射，不按 AutomationName 本地拦截，也不切换到 deprecated HTTP route
+  或执行其他 fallback；
 - 请求发送前 context 已取消时返回 `CodeCanceled` / `DeliveryNotSent`；请求已经
   尝试但没有收到 HTTP 响应时为 `DeliveryUnknown`，不得自动重放；
 - `DeliveryUnknown` 和成功响应都不触发 `AppState` 探测、`ActivateApp`、回滚或

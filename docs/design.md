@@ -697,6 +697,41 @@ Driver 关闭请求并报告其响应，不承诺应用状态只发生键盘变�
 需单独记录在 `docs/compatibility.md`；DP-101 已产生协议测试证据，但尚未产生
 `Verified` 证据。
 
+### 7.7 Background App（DP-110）
+
+DP-110 在根包 `Session` 上提供一个只作用于当前 App 的后台操作：
+
+```go
+func (s *Session) BackgroundApp(ctx context.Context) error
+```
+
+该方法通过固定的 W3C Execute Script 路由调用 Appium 3 正式
+`mobile: backgroundApp` Execute Method：
+
+```text
+POST /session/{sessionId}/execute/sync
+{
+  "script": "mobile: backgroundApp",
+  "args": [{"seconds": -1}]
+}
+```
+
+负数 `seconds` 是 XCUITest 与 Android Driver 都定义的“不恢复”语义；SDK 不接受
+定时时长，也不发送 `null`、`0` 或其他隐式恢复值。Execute Method 的成功 value
+必须严格为 JSON `null`，并由 `ExecuteScriptWithOperationAndDecode` 在统一执行链的
+decoder 阶段校验；`Error.Operation` 与 Observer identity 固定为
+`background_app`。
+
+Background App 是一次有副作用的远端请求，不建立 Session 前后台状态。客户端不
+缓存或探测 `AppState`，不启动计时器、不自动调用 `ActivateApp`、不重试，也不把
+deprecated `/appium/app/background` compatibility route、WDA、UiAutomator2 Server
+或 Host 工具作为 fallback。需要恢复时由调用方显式调用 `ActivateApp`；响应成功不
+保证设备状态在后续时刻仍处于后台。`DeliveryUnknown` 时保留不确定状态且不重放。
+
+当前 Appium 3.6.0、XCUITest Driver 12.1.0 和 UiAutomator2 Driver 8.2.0 的上游
+源码均登记该 Execute Method，但真实设备、Server 和 Host 组合仍须在
+`docs/compatibility.md` 单独验证。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
@@ -1183,6 +1218,7 @@ internal/bidi       BiDi 协议实现
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
 | AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 当前注册的裸 `/context(s)` 路由，不改写或 fallback 到替代路由；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
 | AD-030 | Accepted | Keyboard 状态读取与关闭请求使用根包 `Session` 的 Appium common routes；固定 `keyboard_shown` / `dismiss_keyboard` identity；关闭返回原始 Driver-reported boolean 但只表达一次请求，最终状态须由调用方显式再次读取；不提供特殊键、IME 管理、自动 fallback、轮询、重试或状态缓存 | 隔离 XCUITest 与 UiAutomator2 的探测/关闭差异，保留可观察响应并避免把该响应或单次 `false`/`true` 误当成跨 Driver 的确定事实，同时暴露 Driver 内部按键可能造成的应用副作用 |
+| AD-031 | Accepted | Background App 使用 Appium 3 正式 `mobile: backgroundApp` Execute Method；固定 `seconds=-1` 表达不恢复；成功 value 严格为 `null`；固定 `background_app` identity；不回退到 deprecated HTTP route、不探测状态、不自动恢复或重试 | 避免新 SDK 绑定已从 Appium 3 core 迁出的 `/appium/app/background` compatibility route，同时保留 XCUITest/Android Driver 的统一无恢复语义 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

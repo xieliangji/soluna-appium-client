@@ -161,7 +161,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
 | CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Implemented | Appium 3 裸 `/context(s)` commands + Web CSS viewport/DOM Rect strategy | 精确 `NATIVE_APP` 为 Native，精确 `WEBVIEW`、非空后缀 `WEBVIEW_` 和精确 `CHROMIUM` 为 Web；Unknown 不 fallback，组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Context 不缓存；Safari/Hybrid 组合仍需真实验证 | Protocol | `context.go`, `context_test.go`, `element_context_test.go`, `element.go`, `docs/design.md`, `docs/coordinate-system.md`, `docs/command-semantics.md`, `docs/error-model.md` |
-| NAV-001 | `Session.BackgroundApp` 将当前 App 放入后台且不自动恢复 | Session method | Implemented | Appium common background command；固定 `{"seconds":-1}`；Operation/Observer identity 为 `background_app`；成功 value 严格接受 `null` 或 `true` | common route 在当前两个目标 Driver 中已 deprecated；恢复由 `ActivateApp` 显式执行；不提供定时恢复或 fallback | Protocol | `navigation.go`, `navigation_test.go`, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
+| NAV-001 | `Session.BackgroundApp` 将当前 App 放入后台且不自动恢复 | Session method | Implemented | Appium 3 `mobile: backgroundApp` Execute Method；固定 `{"script":"mobile: backgroundApp","args":[{"seconds":-1}]}`；Operation/Observer identity 为 `background_app`；成功 value 严格为 `null` | Execute Method 是正式入口；恢复由 `ActivateApp` 显式执行；不提供定时恢复或 deprecated HTTP route fallback | Protocol | `navigation.go`, `navigation_test.go`, `docs/design.md`（AD-031）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
 | NAV-002 | 屏幕方向读取与设置 | Session method | Accepted | Appium Orientation | Portrait/Landscape 强类型 | None | 新增 `orientation.go` |
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |
 | NAV-004 | 通用 `Back` | Session method | Excluded | Driver-specific navigation | Android 物理 Back 与 iOS 启发式导航不等价 | None | 平台包可单独评审 |
@@ -169,10 +169,10 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | DEV-002 | 设备时间 | Session method | Accepted | Appium common command | Driver/Host 获取路径不同 | None | 返回可校验时间事实，不猜格式 |
 
 > NAV-001 当前只有 Appium 3.6.0、XCUITest Driver 12.1.0 与 UiAutomator2 Driver
-> 8.2.0（其 Android Driver 14.0.2）的上游源码观察：两个目标 Driver 都注册
-> deprecated common background route，并把负数 `seconds` 解释为不恢复；当前成功
-> value 分别可表现为 `null` 与 `true`。这不是 `Verified` 证据。若后续版本移除或
-> 拒绝该 route，统一映射远端 unsupported/command error，不改走 `mobile:`、WDA、
+> 8.2.0（其 Android Driver 14.0.2）的上游源码观察：两者都注册并实现
+> `mobile: backgroundApp` Execute Method，负数 `seconds` 表示不恢复；这不是
+> `Verified` 证据。若后续版本移除或拒绝该 Execute Method，统一映射远端
+> unsupported/command error，不改走 deprecated HTTP compatibility route、WDA、
 > UiAutomator2 Server 或 Host 工具 fallback。
 
 ### 5.6 应用控制、录屏与脚本
