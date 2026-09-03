@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-09-02
+> 最后更新：2026-09-03
 
 ## 1. 文档目的
 
@@ -146,8 +146,15 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ALERT-001 | Alert 文本 | Session method | Implemented | W3C Get Alert Text | `no such alert` 映射为 `CodeAlertNotFound`；成功值为 JSON string 或 `null`，通过 `hasText` 区分 | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
 | ALERT-002 | Accept / Dismiss Alert | Session method | Implemented | W3C Alert commands | 不增加 `HasAlert` TOCTOU API；POST 请求体为 JSON `{}`；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
 | ALERT-003 | Set Alert Text | Session method | Implemented | W3C Set Alert Text | 仅含输入框 Alert 有效；POST 请求体含 `text`；成功值严格为 JSON `null` | Protocol | `alerts.go`, `alerts_test.go`, `docs/command-semantics.md` |
-| KBD-001 | Keyboard Shown | Session method | Accepted | Appium common command | Driver 探测实现不同 | None | 新增 `keyboard.go` |
-| KBD-002 | Dismiss Keyboard | Session method | Accepted | Appium common command | 需定义“尝试”与最终状态语义 | None | 先验证两 Driver 行为 |
+| KBD-001 | `Session.KeyboardShown` | Session method | Accepted | Appium common command `is_keyboard_shown`；每次返回不缓存的 Driver 状态快照；Operation/Observer identity 固定为 `keyboard_shown` | XCUITest 通过键盘元素探测；UiAutomator2 读取输入法状态；false 不等于永久或像素级事实 | None | DP-100 `docs/design.md`、`docs/command-semantics.md`、`docs/error-model.md`；DP-101 实现与协议测试待完成 |
+| KBD-002 | `Session.DismissKeyboard`（`(bool, error)`） | Session method | Accepted | Appium common command `hide_keyboard`；固定 `{}` 请求；严格校验并返回原始 Driver boolean；Operation/Observer identity 固定为 `dismiss_keyboard`；不把结果当最终状态 | 两 Driver 的关闭策略和 true/false 语义不同；内部 Done/ESC/BACK 可能改变应用状态；不提供 strategy/特殊键、IME 管理或 fallback；当前 Appium 3.6.0/XCUITest Driver 12.1.0 route 仍存在但 deprecated，移除后只返回统一远端错误 | None | DP-100 `docs/design.md`、`docs/command-semantics.md`、`docs/error-model.md`；DP-101 实现、严格响应测试与真实版本/设备兼容性验证待完成 |
+
+> KBD-002 当前只有 Appium 3.6.0 + XCUITest Driver 12.1.0 的上游源码观察：
+> common `hide_keyboard` route 仍注册但已 deprecated。这不是已支持的版本范围，
+> 也不是 `Verified` 证据；DP-101 必须在 `docs/compatibility.md` 逐项记录实际
+> Appium 3.x、XCUITest/UiAutomator2 Driver、WDA/UiAutomator2 Server、设备和 Host
+> 组合。若任一版本移除或拒绝该 common route，统一映射远端 unsupported/command
+> error，不能切换到 `mobile:`、WDA 或 Host 工具 fallback。
 
 ### 5.5 Context、导航与设备状态
 

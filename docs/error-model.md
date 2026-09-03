@@ -87,6 +87,40 @@ WebDriver 文档相对 `Element.Rect` 减去同一滚动快照后，在同一 CS
 或 CSS/device-pixel 转换。Native Find/Tap 的既有 Window Rect 交集和错误语义
 保持不变。
 
+## Keyboard 错误（DP-100 设计契约，待 DP-101 实现）
+
+`Session.KeyboardShown` 与 `Session.DismissKeyboard` 使用 Appium 3 common
+keyboard routes，并沿用统一的 Error/Delivery 映射。键盘能力不增加专用
+`ErrorCode`：
+
+- `KeyboardShown` 的成功 value 不是 JSON boolean（包括 `null`）时，或
+  `DismissKeyboard` 的成功 value 不是 JSON boolean 时，返回
+  `CodeResponseInvalid`，Delivery 为 `DeliveryAcknowledged`，不返回部分结果；
+- 两个命令的 `Error.Operation` 和 Observer `Started`/`Finished` identity 分别固定为
+  `keyboard_shown` 与 `dismiss_keyboard`，包括响应格式错误、远端错误和投递不确定
+  的情况；不得改用 route 名称或 Driver 名称；
+- 远端 `unknown command`、`unsupported operation`、Session/Driver 错误继续使用
+  通用远端错误映射（通常为 `CodeUnsupported` 或 `CodeCommandFailed`），不由 SDK
+  根据 Driver 名称预先拦截，也不改走 `mobile:` 或平台内部路径；
+- 参数、配置、请求构造和 context 取消沿用统一本地错误语义。请求发送前的取消或
+  参数错误为 `DeliveryNotSent`；已尝试请求但没有 HTTP 响应为
+  `DeliveryUnknown`；收到响应后（包括响应格式错误）为 `DeliveryAcknowledged`；
+- `DeliveryUnknown` 的 `DismissKeyboard` 不得重放，也不得据此推测键盘是否已关闭；
+  `DismissKeyboard` 成功时返回 Driver-reported boolean 和 nil error；该值是可观察的
+  协议结果，但只表示 Driver 对本次请求的报告，`false` 不是错误，也不转换为
+  `CodeElementNotFound` 或其他领域错误。收到成功响应仍不表示键盘最终隐藏；
+- 需要确认关闭时，调用方在 `DismissKeyboard` 成功后显式再次调用
+  `KeyboardShown`。该读取仍是可能立即失效的 Driver 快照，SDK 不自动等待、轮询、
+  重试、缓存、切换 Context 或管理 IME；Driver 内部的 Done/ESC/BACK 也可能产生
+  提交、Return、导航或其他应用副作用，SDK 不承诺应用状态只发生键盘变化。
+
+DP-101 必须在统一 `executeCommand` 的 response decoder slot 中严格区分 JSON
+`true`/`false` 与 `null`、数字、字符串、对象、数组，并在
+`Observer.OnCommandFinished` 之前执行校验。应使用 `json.RawMessage` 类型检查或
+带显式 nil 检查的 `*bool`；直接解码到 Go `bool` 会把 `null` 的零值误当作合法
+`false`。这些格式错误均保持 `CodeResponseInvalid`/`DeliveryAcknowledged`，且
+不交付部分结果。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与

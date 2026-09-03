@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-09-02
+> 最后更新：2026-09-03
 
 ## 1. 文档职责
 
@@ -595,6 +595,108 @@ XCUITest 主线，低版本仍按 Legacy Lane；macOS、Windows、Linux 以及�
 Safari/Android 版本只有在 `docs/compatibility.md` 记录真实结果后才可称为
 `Verified`。当前 DP-090 不写入任何未经实测的兼容性结论。
 
+### 7.6 Keyboard 状态与关闭请求（DP-100）
+
+DP-100 只定义根包 `Session` 上的键盘语义，DP-101 才加入运行时代码。这里的
+Keyboard 仅指当前 Driver 能观察或尝试关闭的软键盘；它不等同于 IME 的安装、选择
+或配置，也不覆盖硬件键盘、文本输入、特殊键发送或截图像素中的键盘区域。
+
+目标公共入口为：
+
+```go
+func (s *Session) KeyboardShown(ctx context.Context) (bool, error)
+func (s *Session) DismissKeyboard(ctx context.Context) (bool, error)
+```
+
+两个入口都属于根包 `Session`，不创建平台 Session 或独立 Client。它们只使用
+Appium 3 common command，并进入根包统一 HTTP 执行链。
+
+两个命令的本地 `Error.Operation` 和 Observer `Started`/`Finished` identity 固定为
+`keyboard_shown` 与 `dismiss_keyboard`，不随 wire route、Driver 名称或实现文件名
+变化。
+
+`KeyboardShown` 是一次不缓存的远端状态快照：
+
+- 每次调用只发送一次 `GET /session/{sessionId}/appium/device/is_keyboard_shown`；
+- `true` 只表示 Driver 在该次探测中报告键盘显示，`false` 只表示 Driver 在该次
+  探测中报告未显示；两者都可能在响应后立即失效；
+- `false` 是调用方能够取得的“当前未显示”快照，不是对屏幕像素或下一条命令的
+  绝对保证。某些 Driver 会把内部查找失败也折叠为 `false`，SDK 不替它恢复或
+  推断更强的事实；
+- 客户端不预先读取 Context、Healthy、Discovery 或其他状态，也不切换 Context。
+
+`DismissKeyboard` 是一次关闭请求，而不是关闭状态的断言：
+
+- 每次调用只发送一次 `POST /session/{sessionId}/appium/device/hide_keyboard`，请求体
+  固定为 JSON object `{}`；
+- 不从 SDK 接受或发送 `strategy`、`key`、`keyCode`、`keyName`，也不发送 Back、
+  Escape、tap-out、swipe、JavaScript click 或其他本地 fallback；Driver 内部采用的
+  机制仍是远端实现事实；
+- Appium 类型契约的成功 value 是 JSON boolean。SDK 严格校验该类型，并将原始
+  Driver-reported boolean 作为第一个返回值交给调用方；`true` 和 `false` 都是已收到
+  成功响应的情况。`false` 可能表示已经隐藏或没有发生可报告的转换，不能被提升为
+  跨 Driver 的失败或最终状态；当 `error` 非 nil 时，第一个返回值是零值，调用方不得
+  使用它推断远端状态；
+- 成功只表示该次关闭请求得到成功响应，不表示键盘已经关闭。SDK 不自动等待、
+  后置探测、轮询、重试、缓存结果或串行化 Session 命令。
+
+需要确认关闭时，调用方必须显式分开两个动作：
+
+```text
+driverReported, err := DismissKeyboard(ctx)
+    -> err == nil 时保留 Driver-reported boolean；仍只说明请求完成
+KeyboardShown(ctx)
+    -> false 才是该时刻 Driver 报告的未显示快照
+```
+
+第二次读取失败、返回 `true` 或在读取前发生状态竞争时，SDK 不把请求结果改写
+为“已关闭”；调用方可以自行决定是否使用 `wait` 包进行有界的显式轮询。`Delivery`
+仍只描述每个独立命令的投递事实。
+
+关闭请求可能产生超出键盘可见性之外的应用副作用：Driver 内部的 Done、ESC 或
+BACK 可能触发编辑器提交/Return 处理、页面导航、对话框关闭或其他应用逻辑；在
+键盘状态发生竞争时也可能作用于已经重新获得焦点的页面。该能力只承诺发起一次
+Driver 关闭请求并报告其响应，不承诺应用状态只发生键盘变化，也不提供事务回滚或
+副作用隔离。
+
+#### 7.6.1 两个目标 Driver 的状态差异
+
+下表描述当前常见 Driver 实现的观测路径和已知局限，属于设计输入而不是对所有
+版本组合的兼容性承诺。SDK 不直接调用这些 Driver 内部端点或 Host 工具。
+
+| Driver | `KeyboardShown` 的典型来源 | `DismissKeyboard` 的典型行为 | 语义局限 |
+|---|---|---|---|
+| XCUITest | 查找 `XCUIElementTypeKeyboard`；找到时报告 `true`，未找到时报告 `false` | common `hide_keyboard` 通常转发到 WDA 的键盘 dismiss；部分版本会在候选键中加入 `done`，并在请求完成后返回 `true` | 查找异常可能被 Driver 折叠为 `false`；Done 可能触发应用的 Return/提交处理；返回 `true` 不构成独立的关闭后探测 |
+| UiAutomator2 | 读取 Android 输入法服务报告的显示状态（常见实现使用 `mInputShown`） | Driver 可能先读取状态，再由内部平台机制发送 ESC/BACK 并等待消失；已隐藏时可返回 `false`，无法隐藏时可返回远端错误 | 输入法状态不等同截图像素；ESC/BACK 可能导航或改变应用状态；返回 `false`/`true` 的转换和等待范围受 Driver 版本影响 |
+
+因此两者的布尔响应不能在 SDK 中统一解释为“已关闭”。即使 Driver 内部使用了
+特殊键或等待，SDK 也不复制该策略、不依赖 `adb`/WDA，不提供备用路径。
+
+当前源码基线中，Appium 3.6.0 的 XCUITest Driver 12.1.0 仍注册 common
+`hide_keyboard` route，但该 Driver 方法已标记 deprecated。这只是上游路由存在性的
+观察，不是本项目的真实设备兼容性结论；若后续版本移除或拒绝该 route，SDK 只返回
+统一的远端 unsupported/command error，不改走 `mobile:` 或 WDA 内部 fallback。
+
+#### 7.6.2 能力边界与验证
+
+以下情况不由该能力掩盖或自动修复：
+
+- 没有 Done/关闭按钮、键盘布局自定义、硬件键盘、第三方或 OEM 输入法、焦点
+  丢失、动画尚未结束、键盘被应用重新打开以及 Driver/WDA/UiAutomator2 Server
+  的版本差异；
+- 当前 Context、前台 App、窗口状态和页面状态由调用方负责；SDK 不自动切换
+  Context、恢复输入焦点或确认文本仍存在；
+- SDK 不管理 IME capability/setting（包括输入法选择、启停和 `hideKeyboard`
+  capability），不发送特殊键，也不把关闭失败转成 Back 或点击空白区域；
+- 调用方必须把 Driver 可能发送 Done/ESC/BACK 所带来的提交、Return、导航或其他
+  应用副作用纳入自己的断言和恢复边界；SDK 不承诺只改变键盘状态；
+- 不维护键盘状态缓存，不在并发调用之间建立 Session 级锁，不自动重试或重建
+  Session。`DeliveryUnknown` 时不重放关闭请求，也不猜测远端是否已经执行。
+
+真实 Appium、Driver、WDA/UiAutomator2 Server、设备 OS、设备类型和 Host 组合仍
+需单独记录在 `docs/compatibility.md`；DP-100 不产生 `Protocol` 或 `Verified`
+证据。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
@@ -1080,6 +1182,7 @@ internal/bidi       BiDi 协议实现
 | AD-027 | Accepted | 高级 Execute Script 入口使用根包固定路由；`operation` 是调用方提供且符合 `[a-z][a-z0-9_]{0,63}` 的本地诊断 identity，不开放任意 Method/Route | 允许平台和高级调用方保留低基数错误/Observer identity，同时限制可观测标签污染 |
 | AD-028 | Accepted | 平台强类型 Execute Method 的 `value` decoder 必须在统一 `executeCommand` decoder slot 中运行，并在 `Observer.OnCommandFinished` 前完成 | 调用方错误与 Observer 保持相同的 Code、StatusCode、Delivery 和 operation，禁止执行链外的业务响应校验 |
 | AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 当前注册的裸 `/context(s)` 路由，不改写或 fallback 到替代路由；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
+| AD-030 | Accepted | Keyboard 状态读取与关闭请求使用根包 `Session` 的 Appium common routes；固定 `keyboard_shown` / `dismiss_keyboard` identity；关闭返回原始 Driver-reported boolean 但只表达一次请求，最终状态须由调用方显式再次读取；不提供特殊键、IME 管理、自动 fallback、轮询、重试或状态缓存 | 隔离 XCUITest 与 UiAutomator2 的探测/关闭差异，保留可观察响应并避免把该响应或单次 `false`/`true` 误当成跨 Driver 的确定事实，同时暴露 Driver 内部按键可能造成的应用副作用 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

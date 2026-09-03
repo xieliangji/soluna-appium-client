@@ -148,6 +148,54 @@ Rect；平移任一候选 Rect 后若坐标或端点不再是有限值，整个�
 `CodeResponseInvalid`/`DeliveryAcknowledged` 处理；脚本、传输或 Context 竞争
 错误沿用统一命令语义，且不返回部分元素或发送后续动作。
 
+## Session Keyboard（DP-100 设计契约，待 DP-101 实现）
+
+Keyboard 能力只面向当前 Driver 的软键盘状态快照和一次关闭请求。公共入口属于
+根包 `Session`：
+
+| API | HTTP | 路径 | 请求体 | 成功值 |
+|---|---|---|---|---|
+| `Session.KeyboardShown` | GET | `/session/{sessionId}/appium/device/is_keyboard_shown` | 无 | JSON boolean（Driver 状态快照） |
+| `Session.DismissKeyboard` | POST | `/session/{sessionId}/appium/device/hide_keyboard` | JSON object `{}` | JSON boolean（原始 Driver-reported 结果；非最终状态） |
+
+GET 不带 body，也不发送 `Content-Type`；POST 始终发送空 JSON object 并设置
+`Content-Type: application/json`。Session ID 按统一 Endpoint 规则作为独立路径段
+处理。两条路径都是 Appium 3 common routes，不改写为 `mobile:` Execute Method，
+也不调用 WDA、UiAutomator2 Server 或 Host 工具的内部路径。
+
+两个命令的 `Error.Operation` 以及 Observer `Started`/`Finished` identity 固定为
+`keyboard_shown` 和 `dismiss_keyboard`，分别对应状态读取和关闭请求；它们不使用
+wire route 名称，也不随 Driver 或版本改变。
+
+每次调用只发送一次对应请求，不隐式先读 `KeyboardShown`、Context、Discovery 或
+Healthy，也不执行后置确认、等待、轮询、自动重试、fallback、IME 配置或 Context
+切换。`KeyboardShown` 每次返回远端当前探测结果，不缓存；`false` 仅是该时刻
+Driver 报告未显示，不能推断屏幕像素或后续命令状态。
+
+`DismissKeyboard` 的公共签名为 `(bool, error)`。第一个返回值是成功响应中的原始
+Driver-reported boolean；`true` 和 `false` 都表示收到了成功响应，不能解释为跨
+Driver 的最终关闭事实，也不把 `false` 转换为命令失败。若 `error` 非 nil，该布尔
+值为零值且不可用于推断状态。需要确认关闭时，调用方应在关闭请求成功后显式再次调用
+`KeyboardShown`；必要的有界重复读取由调用方自行调度。SDK 不接受 `strategy`、
+`key`、`keyCode` 或 `keyName` 参数，不发送特殊键或本地点击/滑动等替代动作。
+
+Driver 为关闭请求选择的内部动作可能改变应用状态：例如 WDA 的 Done 或 Android
+Driver 的 ESC/BACK 可能触发 Return/提交、导航、对话框关闭或其他应用逻辑。该命令
+只承诺发起一次 Driver 请求并交付其响应，不承诺应用状态只发生键盘变化；键盘状态
+竞争时也不提供回滚或副作用隔离。
+
+DP-101 的响应 decoder 必须在统一 `executeCommand` 的 decoder slot 中运行，并在
+`Observer.OnCommandFinished` 之前完成。`true`、`false` 是唯一合法成功 token；必须
+显式区分 `null`、数字、字符串、对象和数组（使用 `json.RawMessage` 类型检查，或
+带 nil 检查的 `*bool`，不能直接把响应解码到 `bool` 以免 `null` 被当作 false）。
+协议回归测试还必须覆盖 GET 不发送 `Content-Type`、POST 固定 `{}`、Session ID
+独立路径段转义，以及 `DeliveryUnknown` 时不重放关闭请求。
+
+两 Driver 的状态探测和关闭实现不同：XCUITest 常通过 `XCUIElementTypeKeyboard`
+查询并将 WDA dismiss 结果映射到 common command；UiAutomator2 常读取 Android
+输入法服务状态，并可能在 Driver 内部使用平台按键和等待。上述内部差异不改变
+本 SDK 的路由和返回契约，真实版本组合仍需兼容性验证。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下

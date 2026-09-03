@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-091`（已完成；下一项需显式选择）
-> 最后更新：2026-09-02
+> 当前计划项：`DP-100`（已完成；下一项需显式选择）
+> 最后更新：2026-09-03
 
 ## Agent 执行约束
 
@@ -35,7 +35,7 @@
 | 13 | `DP-081` Pull Logs 实现 | `LOG-001..002` | Done | DP-080 |
 | 14 | `DP-090` Web Context 几何设计 | `CTX-001` | Done | — |
 | 15 | `DP-091` Context API 实现 | `CTX-001` | Done | DP-090 |
-| 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Queued | — |
+| 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Done | — |
 | 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Queued | DP-100 |
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Queued | — |
 | 19 | `DP-111` 屏幕方向 | `NAV-002` | Queued | — |
@@ -288,11 +288,35 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 
 排除运行时代码、特殊键和 IME 管理。
 
+已完成设计（2026-09-03）：
+
+- 确定根包 `Session.KeyboardShown` 与 `Session.DismissKeyboard` 两个公共入口，
+  使用 Appium 3 common `is_keyboard_shown` / `hide_keyboard` 路由并复用统一执行链；
+- 将关闭定义为一次请求，将最终状态确认定义为调用方随后显式读取
+  `KeyboardShown`；不缓存、不自动探测、等待、轮询、重试或恢复；
+- 记录 XCUITest 与 UiAutomator2 的状态探测、关闭实现和布尔返回差异；严格校验
+  Driver boolean 并原样返回，但不把关闭响应包装成跨 Driver 的确定事实；
+- 明确无特殊键/strategy、Back 或其他 fallback，且不管理 IME、Context 或关闭按钮；
+- DP-101 仍待实现运行时代码、协议回归测试和真实兼容性验证。
+
 ### DP-101 Keyboard 实现
 
 - 实现 DP-100 确认的公共入口。
-- 覆盖两 Driver 请求、响应和失败。
-- 不把 Driver 的尝试结果包装成确定事实。
+- `DismissKeyboard` 返回 `(bool, error)`，保留成功响应中的原始 Driver-reported
+  boolean；该值不表示关闭后的最终状态，错误时返回值为零值且不可用于推断状态。
+- 固定 `KeyboardShown` / `DismissKeyboard` 的 Error.Operation 与 Observer identity
+  为 `keyboard_shown` / `dismiss_keyboard`。
+- 覆盖两 Driver 请求、响应和失败；响应 decoder 必须在统一 `executeCommand` 链的
+  decoder slot、`Observer.OnCommandFinished` 之前执行。
+- 严格覆盖成功值 `true`、`false` 以及非法的 `null`、数字、字符串、对象、数组；
+  使用 `json.RawMessage` 类型检查或带 nil 检查的 `*bool`，不直接解码到 Go `bool`。
+- 协议测试覆盖 GET 无 `Content-Type`、POST 固定 `{}`、Session ID 路径转义及
+  `DeliveryUnknown` 不重放；兼容性验收记录 Driver 内部 Done/ESC/BACK 可能导致的
+  Return、提交、导航、对话框关闭或其他应用副作用，不承诺应用状态只发生键盘变化。
+- 当前 Appium 3.6.0/XCUITest Driver 12.1.0 的 common `hide_keyboard` route 仍存在
+  但已 deprecated；若后续移除或拒绝该 route，只返回统一远端 unsupported/command
+  error，不增加 `mobile:` 或平台内部 fallback。真实版本范围和设备结果写入
+  `docs/compatibility.md`，不改变能力矩阵的 `Accepted` / `None` 状态。
 - 排除自动输入恢复和 IME 管理。
 
 ### DP-110 应用放入后台
