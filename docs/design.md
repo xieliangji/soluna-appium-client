@@ -732,6 +732,55 @@ deprecated `/appium/app/background` compatibility route、WDA、UiAutomator2 Ser
 源码均登记该 Execute Method，但真实设备、Server 和 Host 组合仍须在
 `docs/compatibility.md` 单独验证。
 
+### 7.8 屏幕方向（DP-111）
+
+DP-111 在根包 `Session` 上实现 Appium 的二维屏幕方向分类：
+
+```go
+type Orientation string
+
+const (
+    OrientationPortrait  Orientation = "PORTRAIT"
+    OrientationLandscape Orientation = "LANDSCAPE"
+)
+
+func (s *Session) Orientation(ctx context.Context) (Orientation, error)
+func (s *Session) SetOrientation(ctx context.Context, orientation Orientation) error
+```
+
+`Orientation` 是有限、区分大小写的协议集合。读取只接受精确 JSON string
+`PORTRAIT` 或 `LANDSCAPE`；设置只接受上述两个常量，零值、小写、
+带空白、别名和其他自行构造值均在发送前拒绝。客户端不依赖远端可能
+存在的大小写容错，也不做值规范化。
+
+读取和设置分别使用 Appium 3 common route 的 GET 和 POST，并通过根包
+统一 HTTP 执行链完成。`get_orientation` 和 `set_orientation` 是固定的
+Error/Observer identity。读取 decoder 将远端值收窄到公共枚举；设置的
+成功 value 必须严格为 JSON `null`。两个 decoder 都在 Observer Finished 之前
+运行，响应格式错误与调用方观察到的命令结果保持一致。
+
+`Orientation` 是每次调用的远程快照；`SetOrientation` 成功只表示该次命令
+被远端成功处理。Session 不保存当前方向，不在设置前预读，也不在设置
+后自动确认。需要后续状态时，调用方显式再次读取；读取值仍可在响应
+后立即失效。设置为当前方向也会发送一次命令，SDK 不使用缓存短路。
+
+该 common route 不按 `automationName` 在本地门禁；XCUITest 和 UiAutomator2 的
+实际支持、App 允许的方向、设备旋转锁、动画、Context 和前台状态均由远端
+结果表达。SDK 不先读 Discovery、Capabilities、Context 或几何状态，不在错误
+时改走 WDA、UiAutomator2 Server、Host 工具或 Driver-specific Execute Method。
+`DeliveryUnknown` 时不重放有副作用的设置请求，也不更新本地状态。
+
+公共枚举只表示 Portrait/Landscape 分类，不区分 landscape left/right 或
+portrait upside-down。XCUITest/WDA 等远端可将这些物理方向折叠到两个协议值中；
+SDK 不恢复已丢失的方向信息，也不公开 `/rotation` 的 `x/y/z` 空间模型。
+方向变化可使已读取的 Rect、viewport 或 Screenshot 失效，但 Orientation 不参与任何
+隐式坐标、像素、status bar 或截图转换。
+
+当前 Appium 3.6.0、XCUITest Driver 12.1.0/WDA 与 UiAutomator2 Driver 8.2.0
+的上游源码均登记或实现该 route；这只是协议设计输入，不是真实设备
+兼容性证据。真实 Appium、Driver、WDA/UiAutomator2 Server、设备 OS 和 Host
+组合仍须写入 `docs/compatibility.md` 后才可称为 `Verified`。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
@@ -1219,6 +1268,7 @@ internal/bidi       BiDi 协议实现
 | AD-029 | Accepted | Context 名称按不透明 UTF-8 字符串快照处理；仅精确 `NATIVE_APP`、`WEBVIEW`、带非空后缀的 `WEBVIEW_` 或精确 `CHROMIUM` 选择已定义几何策略；Context API 使用 Appium 3 当前注册的裸 `/context(s)` 路由，不改写或 fallback 到替代路由；Unknown 组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Web 使用 CSS layout viewport，Session 不缓存 Context，不自动滚动、fallback、重定位或执行像素转换 | 让 Native 与 Web 的 Find/Tap 坐标语义可区分且可验证，同时保留 Hybrid、Safari、Driver-specific Context 的真实差异，并避免把前置探针的 Delivery 误归因给未发送的主体操作 |
 | AD-030 | Accepted | Keyboard 状态读取与关闭请求使用根包 `Session` 的 Appium common routes；固定 `keyboard_shown` / `dismiss_keyboard` identity；关闭返回原始 Driver-reported boolean 但只表达一次请求，最终状态须由调用方显式再次读取；不提供特殊键、IME 管理、自动 fallback、轮询、重试或状态缓存 | 隔离 XCUITest 与 UiAutomator2 的探测/关闭差异，保留可观察响应并避免把该响应或单次 `false`/`true` 误当成跨 Driver 的确定事实，同时暴露 Driver 内部按键可能造成的应用副作用 |
 | AD-031 | Accepted | Background App 使用 Appium 3 正式 `mobile: backgroundApp` Execute Method；固定 `seconds=-1` 表达不恢复；成功 value 严格为 `null`；固定 `background_app` identity；不回退到 deprecated HTTP route、不探测状态、不自动恢复或重试 | 避免新 SDK 绑定已从 Appium 3 core 迁出的 `/appium/app/background` compatibility route，同时保留 XCUITest/Android Driver 的统一无恢复语义 |
+| AD-032 | Accepted | Orientation 使用根包 Session 的 Appium 3 common route 和精确 `PORTRAIT` / `LANDSCAPE` 强类型；读取为无缓存快照，设置只接受有限枚举且成功 value 严格为 `null`；不确认后续状态、规范化值、fallback 或公开空间 Rotation | 保留两 Driver 共有的二维方向事实，避免伪造横屏左右/倒置信息或把设置响应当成持久状态保证 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

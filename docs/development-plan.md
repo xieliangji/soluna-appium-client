@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-110`（已完成；下一项需显式选择）
+> 当前计划项：`DP-111`（已完成；下一项需显式选择）
 > 最后更新：2026-09-03
 
 ## Agent 执行约束
@@ -38,7 +38,7 @@
 | 16 | `DP-100` Keyboard 语义设计 | `KBD-001..002` | Done | — |
 | 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Done | DP-100 |
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Done | — |
-| 19 | `DP-111` 屏幕方向 | `NAV-002` | Queued | — |
+| 19 | `DP-111` 屏幕方向 | `NAV-002` | Done | — |
 | 20 | `DP-120` 活动 App ID | `DEV-001` | Queued | — |
 | 21 | `DP-121` 设备时间 | `DEV-002` | Queued | — |
 | 22 | `DP-130` Deep Link | `NAV-003` | Queued | — |
@@ -352,9 +352,29 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 
 ### DP-111 屏幕方向
 
-- 实现 Portrait/Landscape 强类型及读取、设置。
-- 严格解码且不缓存状态。
-- 覆盖两 Driver；排除空间 Rotation。
+- 实现根包 `Orientation` 强类型、`OrientationPortrait` /
+  `OrientationLandscape` 常量以及 `Session.Orientation` /
+  `Session.SetOrientation`。
+- 使用 Appium 3 common `GET/POST /session/{sessionId}/orientation` 路由；GET 无
+  请求体，POST 固定发送 `{"orientation":"PORTRAIT"}` 或
+  `{"orientation":"LANDSCAPE"}`。
+- 读取成功值严格限定为精确大写 JSON string `PORTRAIT` 或
+  `LANDSCAPE`；设置成功值严格为 JSON `null`。非精确设置值在发送
+  前返回 `CodeInvalidArgument` / `DeliveryNotSent`，不做大小写、空白或
+  别名规范化。
+- 固定 Error/Observer identity 为 `get_orientation` / `set_orientation`；响应
+  decoder 在统一执行链中、Observer Finished 之前完成。
+- 覆盖 XCUITest 与 UiAutomator2 的请求、成功响应、路径转义、无缓存
+  读取、无效参数零请求、严格响应、远端失败、请求前取消和
+  `DeliveryUnknown` 不重放。
+- 不缓存或自动确认设置后状态，不探测 Driver/Context/Discovery，不执行
+  坐标或截图方向换算；排除横屏左右、倒置竖屏选择与 `x/y/z`
+  空间 Rotation API。
+
+已完成根包 Orientation 实现和协议回归测试。每次读取都返回远端快照，
+每次设置只发送一次有副作用命令；成功响应不被提升为后续屏幕状态
+保证。当前能力矩阵状态为 `Implemented` / `Protocol`；真实 Appium、Driver、
+设备和 Host 组合仍未验证，结果须单独写入 `docs/compatibility.md`。
 
 ### DP-120 活动 App ID
 

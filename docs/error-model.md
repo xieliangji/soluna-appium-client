@@ -138,6 +138,27 @@ Error/Delivery 映射，不增加专用 `ErrorCode`：
 - `DeliveryUnknown` 和成功响应都不触发 `AppState` 探测、`ActivateApp`、回滚或
   本地状态更新。调用方不能据此推断远端最终前后台状态，恢复必须显式执行。
 
+## Orientation 错误（DP-111 已实现）
+
+`Session.Orientation` 与 `Session.SetOrientation` 沿用统一 Error/Delivery 模型，
+不增加 Orientation 专用 `ErrorCode`：
+
+- 读取成功 value 不是精确 JSON string `PORTRAIT` 或 `LANDSCAPE` 时，
+  返回 `CodeResponseInvalid` / `DeliveryAcknowledged` 和 `Orientation` 零值；
+  客户端不接受未知、小写、空白或隐式替换后的结果；
+- 设置参数不是 `OrientationPortrait` 或 `OrientationLandscape` 时，在发送前
+  返回 `CodeInvalidArgument` / `DeliveryNotSent`，不调用远端；设置成功
+  value 非 JSON `null` 时返回 `CodeResponseInvalid` / `DeliveryAcknowledged`；
+- 读取与设置的 `Error.Operation` 和 Observer identity 分别固定为
+  `get_orientation` 和 `set_orientation`，包括响应格式错误、远端失败和
+  投递不确定；decoder 在 Observer Finished 之前执行；
+- 远端 `unknown command`、`unsupported operation`、旋转被 App/设备拒绝或
+  其他 Driver 错误使用统一远程映射和 `DeliveryAcknowledged`；SDK 不根据
+  Driver 名称改变错误，不调用 `/rotation`、平台内部端点或 Host 工具 fallback；
+- 请求发送前的 context 取消或截止保持 `DeliveryNotSent`；已尝试设置但没有
+  收到 HTTP 响应时为 `DeliveryUnknown`，不重放、不回滚，也不更新或推测
+  本地/远程方向状态。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与

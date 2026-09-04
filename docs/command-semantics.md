@@ -227,6 +227,45 @@ Execute Method 不可用、被拒绝或远端返回 unsupported 时沿用统一�
 Server、Host 工具或通用 Back。传输结果为 `DeliveryUnknown` 时不重放请求，也不推测
 App 是否已经进入后台；不提供定时恢复、后台计时器或状态恢复任务。
 
+## Session Orientation（DP-111 已实现）
+
+Orientation 使用根包 `Session` 和 Appium 3 common route：
+
+| API | HTTP | 路径 | 请求体 | 成功 value |
+|---|---|---|---|---|
+| `Session.Orientation` | GET | `/session/{sessionId}/orientation` | 无 | JSON string `"PORTRAIT"` 或 `"LANDSCAPE"` |
+| `Session.SetOrientation` | POST | `/session/{sessionId}/orientation` | `{"orientation":"PORTRAIT"}` 或 `{"orientation":"LANDSCAPE"}` | JSON `null` |
+
+GET 不带 body，也不发送 `Content-Type`；POST 发送只包含 `orientation` 的
+JSON object 并设置 `Content-Type: application/json`。Session ID 按统一 Endpoint
+规则作为独立路径段转义。两条命令的 Error/Observer identity 分别固定为
+`get_orientation` 和 `set_orientation`。
+
+`Orientation` 是 string 底层类型的有限公共枚举，只公开
+`OrientationPortrait` (`PORTRAIT`) 和 `OrientationLandscape` (`LANDSCAPE`)。
+读取值必须是上述两个精确大写 JSON string；`null`、其他 JSON 类型、
+空字符串、小写、带空白、未知值、非法 UTF-8 或未配对 surrogate 均返回
+`CodeResponseInvalid` / `DeliveryAcknowledged`，不交付部分或未知枚举值。
+
+`SetOrientation` 的参数必须精确等于两个公共常量之一。零值、小写、
+空白、别名、非法 UTF-8 或任意自行构造值在 JSON 编码和远程请求前返回
+`CodeInvalidArgument` / `DeliveryNotSent`；客户端不做大小写、空白或
+协议别名规范化。设置成功值严格为 JSON `null`，其他类型均为
+`CodeResponseInvalid` / `DeliveryAcknowledged`。
+
+每次 `Orientation` 都发送一次读取并返回远端快照；每次合法
+`SetOrientation` 都发送一次设置，即使参数与当前方向相同。客户端不缓存、
+预读、后置确认、等待、重试或串行化 Session 命令。设置成功不保证 App
+接受某个物理旋转方向，也不保证随后读取仍为该值；需要时由调用方显式
+再次读取。
+
+命令不本地门禁 XCUITest 或 UiAutomator2，不读取 Runtime Discovery、Context、
+Capabilities 或几何状态。远端 unsupported 沿用统一命令错误，不改走 WDA、
+UiAutomator2 Server、Host 工具、Execute Method 或 `/rotation` fallback。
+`DeliveryUnknown` 时不重放设置请求或推测远程状态。本公共类型不区分
+landscape left/right 和 portrait upside-down，也不表示 `/rotation` 的 `x/y/z`
+空间旋转。Orientation 不自动转换 Rect、ViewportRect、Actions 或 Screenshot。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下
