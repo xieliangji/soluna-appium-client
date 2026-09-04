@@ -787,6 +787,56 @@ SDK 以正式 route 为协议基线，不以 fallback 维持旧入口。上述�
 Server、设备 OS 和 Host 组合仍须写入 `docs/compatibility.md` 后才可称为
 `Verified`。
 
+### 7.9 活动 App ID（DP-120）
+
+DP-120 在根包 `Session` 上提供当前 Driver 所识别前台应用的统一只读标识：
+
+```go
+func (s *Session) ActiveAppID(ctx context.Context) (string, error)
+```
+
+公共结果统一为 `string`，但平台含义保持明确：XCUITest 返回非空
+iOS bundle ID，UiAutomator2 返回 Android package；后者明确报告没有
+focused package 时返回空字符串和 nil error。SDK 依据创建 Session 后远端
+确认的、区分大小写的 `automationName` 选择以下固定 Execute Method；该字段
+只用于选择协议映射，不作为活动 App ID 本身：
+
+| `automationName` | Execute Method | Driver 成功 value | 公共结果 |
+|---|---|---|---|
+| `XCUITest` | `mobile: activeAppInfo` | JSON object，必须包含精确 `bundleId` 非空 string | `bundleId` |
+| `UiAutomator2` | `mobile: getCurrentPackage` | 非空 JSON string 或 `null` | Android package；`null` 映射为空字符串 |
+
+两个分支都通过固定的 W3C Execute Script route
+`POST /session/{sessionId}/execute/sync` 进入根包统一执行链，参数固定为 `args: []`，
+Error/Observer identity 固定为 `get_active_app_id`。XCUITest 的 active app info 还可能
+包含 `pid`、`name`、`processArguments` 和后续未知字段；本能力只读取 `bundleId`，
+不复制、缓存或公开其余进程信息。`bundleId` 字段名按精确大小写匹配。两个分支的
+标识字符串均严格校验 JSON string、Unicode surrogate 和非空约束，但不 trim、
+不校验 package/bundle ID 语法，也不执行大小写或别名规范化。只有
+UiAutomator2 顶层 `null` 是合法的缺失快照；它与非法的空 JSON string 明确区分。
+
+`ActiveAppID` 每次只发送一次与 Driver 对应的 Execute Method，并返回该次响应快照；
+前台应用可能在响应后立即变化。XCUITest 的活动应用选择仍受 WDA 的
+`defaultActiveApplication`、检测点和系统界面状态影响，UiAutomator2 返回其 Driver
+识别到的当前 focused package；SDK 不把两者提升为更强的跨平台焦点保证。
+
+未知或大小写不匹配的 `automationName` 在本地返回 `CodeUnsupported` /
+`DeliveryNotSent`。SDK 不从创建请求或远端 Capabilities 中的 `app`、`bundleId`、
+`appPackage`、`browserName` 等字段猜测结果，不读取 Runtime Discovery、Context、
+Page Source、Window 或 AppState，也不执行进程枚举、安装信息查询或 Host 工具调用。
+Execute Method 失败时不 fallback 到 deprecated Android
+`/session/{sessionId}/appium/device/current_package` route、WDA 内部
+`/wda/activeAppInfo`、UiAutomator2 Server、其他脚本或 Capability 快照；投递不确定
+时也不自动重放。
+
+当前 Appium 3.6.0、XCUITest Driver 12.1.0 与 UiAutomator2 Driver 8.2.0
+（Android Driver 14.0.2）的上游源码分别登记 `mobile: activeAppInfo` 和
+`mobile: getCurrentPackage`；后者文档标注自 UiAutomator2 Driver 2.20 起可用且可
+返回 `null`，其底层 `appium-adb` 也在焦点信息明确为 null 时返回该值。旧
+`current_package` HTTP route 在当前源码中已标记 deprecated。上述只是协议设计输入，
+不是设备兼容性证据；真实 Appium、Driver、WDA/UiAutomator2 Server、设备 OS 和
+Host 组合仍须写入 `docs/compatibility.md` 后才可称为 `Verified`。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
@@ -1203,6 +1253,7 @@ contexts.go         Context
 alerts.go           Alert
 keyboard.go         Keyboard
 orientation.go      Orientation
+active_app.go       Active App ID
 navigation.go       Background、Deep Link 等导航行为
 recording.go        Recording
 timeouts.go         Timeouts
@@ -1275,6 +1326,7 @@ internal/bidi       BiDi 协议实现
 | AD-030 | Accepted | Keyboard 状态读取与关闭请求使用根包 `Session` 的 Appium common routes；固定 `keyboard_shown` / `dismiss_keyboard` identity；关闭返回原始 Driver-reported boolean 但只表达一次请求，最终状态须由调用方显式再次读取；不提供特殊键、IME 管理、自动 fallback、轮询、重试或状态缓存 | 隔离 XCUITest 与 UiAutomator2 的探测/关闭差异，保留可观察响应并避免把该响应或单次 `false`/`true` 误当成跨 Driver 的确定事实，同时暴露 Driver 内部按键可能造成的应用副作用 |
 | AD-031 | Accepted | Background App 使用 Appium 3 正式 `mobile: backgroundApp` Execute Method；固定 `seconds=-1` 表达不恢复；成功 value 严格为 `null`；固定 `background_app` identity；不回退到 deprecated HTTP route、不探测状态、不自动恢复或重试 | 避免新 SDK 绑定已从 Appium 3 core 迁出的 `/appium/app/background` compatibility route，同时保留 XCUITest/Android Driver 的统一无恢复语义 |
 | AD-032 | Accepted | Orientation 使用根包 Session 的 Appium 3 正式 Appium Device route（`/session/{sessionId}/appium/device/orientation`）和精确 `PORTRAIT` / `LANDSCAPE` 强类型；读取为无缓存快照，设置只接受有限枚举且成功 value 严格为 `null`；不回退 deprecated JSONWP route、不确认后续状态、不规范化值或公开空间 Rotation | 保留两 Driver 共有的二维方向事实，避免伪造横屏左右/倒置信息或把设置响应当成持久状态保证 |
+| AD-033 | Accepted | `Session.ActiveAppID` 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 保留为空字符串无焦点快照；未知 Driver 本地拒绝，不从 App/bundle/package Capability 猜测，不公开进程信息或执行 fallback | 在保持平台标识含义和 Driver 探测差异的同时提供统一只读入口，并避免初始启动配置被误当成动态前台状态 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

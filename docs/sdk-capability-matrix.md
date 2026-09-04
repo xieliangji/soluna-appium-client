@@ -165,7 +165,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | NAV-002 | `Session.Orientation` / `Session.SetOrientation`；`OrientationPortrait` / `OrientationLandscape` | Session method | Implemented | Appium 3 正式 Appium Device `GET/POST /session/{sessionId}/appium/device/orientation`；精确大写强类型；`get_orientation` / `set_orientation` identity；设置成功值严格为 `null` | 协议基线 Appium 3.7.0（`@appium/base-driver` 10.8.0）；XCUITest / UiAutomator2；只表达 Portrait/Landscape 分类；不缓存、规范化、确认、fallback 或执行空间 Rotation | Protocol | `orientation.go`, `orientation_test.go`, `docs/design.md`（AD-032）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |
 | NAV-004 | 通用 `Back` | Session method | Excluded | Driver-specific navigation | Android 物理 Back 与 iOS 启发式导航不等价 | None | 平台包可单独评审 |
-| DEV-001 | 活动 App ID | Session method | Accepted | Driver active app/package info | iOS bundle ID / Android package | None | 定义统一只读结果 |
+| DEV-001 | `Session.ActiveAppID` | Session method | Implemented | 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 映射为空字符串无焦点快照；固定 `get_active_app_id` identity | 只支持 XCUITest / UiAutomator2；不从 App/bundle/package Capability 猜测，不公开进程/安装信息，不 fallback 到 deprecated 或内部 route | Protocol | `active_app.go`, `active_app_test.go`, `docs/design.md`（AD-033）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
 | DEV-002 | 设备时间 | Session method | Accepted | Appium common command | Driver/Host 获取路径不同 | None | 返回可校验时间事实，不猜格式 |
 
 > NAV-001 当前只有 Appium 3.6.0、XCUITest Driver 12.1.0 与 UiAutomator2 Driver
@@ -183,6 +183,13 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 > 两类返回值。这些不是 `Verified` 证据；若远端拒绝正式 route，SDK 只返回统一
 > 远程错误，不调用 legacy route、Driver/WDA/UiAutomator2 Server 内部端点、
 > Host 工具或 `/rotation` fallback。
+
+> DEV-001 当前有 Appium 3.6.0、XCUITest Driver 12.1.0 与 UiAutomator2 Driver
+> 8.2.0（Android Driver 14.0.2）的上游源码观察：前者登记
+> `mobile: activeAppInfo` 并返回含 `bundleId` 的对象，后者登记
+> `mobile: getCurrentPackage` 并返回 focused package，没有焦点时可为 `null`；旧 Android
+> `current_package` HTTP route 已标记 deprecated。上述不是 `Verified` 证据；真实
+> Appium、Driver、WDA/UiAutomator2 Server、设备与 Host 组合仍需单独记录。
 
 ### 5.6 应用控制、录屏与脚本
 

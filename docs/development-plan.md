@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-111`（已完成；下一项需显式选择）
+> 当前计划项：`DP-120`（已完成；下一项需显式选择）
 > 最后更新：2026-09-04
 
 ## Agent 执行约束
@@ -39,7 +39,7 @@
 | 17 | `DP-101` Keyboard 实现 | `KBD-001..002` | Done | DP-100 |
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Done | — |
 | 19 | `DP-111` 屏幕方向 | `NAV-002` | Done | — |
-| 20 | `DP-120` 活动 App ID | `DEV-001` | Queued | — |
+| 20 | `DP-120` 活动 App ID | `DEV-001` | Done | — |
 | 21 | `DP-121` 设备时间 | `DEV-002` | Queued | — |
 | 22 | `DP-130` Deep Link | `NAV-003` | Queued | — |
 | 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Queued | — |
@@ -381,9 +381,30 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 
 ### DP-120 活动 App ID
 
-- 实现统一前台 App ID。
-- 显式映射 iOS bundle ID 与 Android package。
-- 不从 Capability 猜测；排除进程枚举和安装信息。
+- 实现根包 `Session.ActiveAppID(ctx) (string, error)`，统一返回前台 App ID
+  快照；XCUITest 结果是 iOS bundle ID，UiAutomator2 结果是 Android package，
+  Android 明确没有 focused package 时返回空字符串和 nil error。
+- 按创建 Session 后远端确认的精确 `automationName` 显式映射 XCUITest
+  `mobile: activeAppInfo` 与 UiAutomator2 `mobile: getCurrentPackage`，都通过固定
+  W3C Execute Script route 和 `args: []` 进入统一执行链。
+- XCUITest 只读取 active app info 中精确的非空 string `bundleId`，忽略且不公开
+  pid、name、processArguments 与未知字段；UiAutomator2 只接受非空 JSON string
+  或表示无焦点的 `null`。标识字符串都严格校验 UTF-8 和 surrogate，不 trim
+  或规范化；空 JSON string 与 Android `null` 明确区分。
+- 固定 Error/Observer identity 为 `get_active_app_id`；响应 decoder 在 Observer
+  Finished 之前完成。未知 Driver 在请求前返回 `CodeUnsupported` /
+  `DeliveryNotSent`。
+- 覆盖两 Driver 的请求 body、路径转义、动态快照、严格响应、未知 Driver 零请求、
+  Observer、远端失败、请求前取消与 `DeliveryUnknown` 不重放。
+- 不从请求或响应 Capability 的 app、bundleId、appPackage 或 browserName 猜测；
+  不读取 Discovery/Context/AppState，不枚举进程或安装信息，不调用 Host 工具；
+  不 fallback 到 deprecated Android `current_package` HTTP route、WDA/UiAutomator2
+  Server 内部端点或其他脚本。
+
+已完成根包 Active App ID 实现和协议回归测试。当前能力矩阵状态为
+`Implemented` / `Protocol`；现有 Appium 3.6.0、XCUITest Driver 12.1.0 与
+UiAutomator2 Driver 8.2.0 的源码观察只作为协议依据，真实 Driver、设备和 Host
+组合仍未验证，结果须单独写入 `docs/compatibility.md`。
 
 ### DP-121 设备时间
 

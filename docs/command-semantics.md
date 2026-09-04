@@ -271,6 +271,44 @@ UiAutomator2 Server、Host 工具、Execute Method、deprecated
 landscape left/right 和 portrait upside-down，也不表示 `/rotation` 的 `x/y/z`
 空间旋转。Orientation 不自动转换 Rect、ViewportRect、Actions 或 Screenshot。
 
+## Session Active App ID（DP-120 已实现）
+
+`Session.ActiveAppID` 按创建 Session 后远端确认的精确 `automationName`，将两个
+Driver 的动态前台应用查询映射为统一的字符串结果：
+
+| `automationName` | HTTP / 路径 | 请求体 | 成功 value | 返回值 |
+|---|---|---|---|---|
+| `XCUITest` | POST `/session/{sessionId}/execute/sync` | `{"script":"mobile: activeAppInfo","args":[]}` | 含精确 `bundleId` 非空 string 的 JSON object | iOS bundle ID |
+| `UiAutomator2` | POST `/session/{sessionId}/execute/sync` | `{"script":"mobile: getCurrentPackage","args":[]}` | 非空 JSON string 或 `null` | Android package；`null` 返回空字符串 |
+
+两个分支都使用 W3C Execute Script 固定路由、JSON object 请求体和
+`Content-Type: application/json`；Session ID 作为独立路径段转义，`args` 必须编码为
+空 JSON array 而不是 `null`。固定 Error/Observer identity 为
+`get_active_app_id`，Driver-specific value decoder 在统一执行链中、Observer
+Finished 之前完成。
+
+XCUITest 响应只要求并读取精确小写驼峰字段 `bundleId`；`pid`、`name`、
+`processArguments` 和其他未知字段被忽略且不会进入公共结果。UiAutomator2 value
+为 string 时直接作为 package；为 `null` 时表示 Driver 当时没有识别到 focused
+package，返回 `""` 和 nil error。两个平台的标识必须是严格、有效 Unicode 的
+非空 JSON string；UiAutomator2 的 `null` 与非法的空 JSON string 明确区分。XCUITest
+顶层/字段 `null`、其他错误 JSON 类型、缺失/大小写错误的 `bundleId`、空标识、
+非法 UTF-8 或未配对 surrogate 都返回 `CodeResponseInvalid` /
+`DeliveryAcknowledged`，且返回空字符串。合法非空值按原样交付，不 trim、
+不规范化，也不猜测 bundle/package 语法。
+
+每次调用只发送一次所选 Execute Method，并返回可能立即失效的 Driver 快照；不缓存、
+自动等待、重试或后置确认。映射只使用远端确认的 `automationName` 选择命令，不从
+请求或响应 Capabilities 的 `app`、`bundleId`、`appPackage`、`browserName` 推断结果。
+未知或大小写不匹配的 Driver 在发送前返回 `CodeUnsupported` /
+`DeliveryNotSent`。
+
+Execute Method 不可用或远端失败时不改走 deprecated Android
+`/session/{sessionId}/appium/device/current_package`、WDA
+`/wda/activeAppInfo`、UiAutomator2 Server、其他 Execute Method、Capability 或 Host
+工具。SDK 不返回 XCUITest 的 pid/name/process arguments，不查询 Android activity，
+也不枚举进程或已安装应用；`DeliveryUnknown` 时只报告投递事实，不自动重放读取。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下

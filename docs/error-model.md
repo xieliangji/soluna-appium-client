@@ -160,6 +160,30 @@ Error/Delivery 映射，不增加专用 `ErrorCode`：
   收到 HTTP 响应时为 `DeliveryUnknown`，不重放、不回滚，也不更新或推测
   本地/远程方向状态。
 
+## Active App ID 错误（DP-120 已实现）
+
+`Session.ActiveAppID` 使用 `get_active_app_id` 作为两个 Driver 分支共同的 Error 和
+Observer operation identity，不增加专用 `ErrorCode`：
+
+- 只接受 XCUITest active app info object 中精确、非空 string `bundleId`，或
+  UiAutomator2 `getCurrentPackage` 返回的非空 JSON string / `null`；Android
+  `null` 是合法的无 focused package 快照，返回 `""` 和 nil error；
+- XCUITest 顶层或 `bundleId` 为 `null`、两个平台的错误类型、缺失或大小写
+  错误字段、空 JSON string、非法 UTF-8 和未配对 surrogate 均返回
+  `CodeResponseInvalid` / `DeliveryAcknowledged`，且不交付部分标识；
+- response decoder 在统一 `executeCommand` 的 decoder slot 中、Observer Finished
+  之前完成；因此调用方错误和完成事件使用相同的 `get_active_app_id`、ErrorCode、
+  StatusCode 与 Delivery；
+- 未知或非精确 `automationName` 无法选择已接受的协议映射，在远端请求前返回
+  `CodeUnsupported` / `DeliveryNotSent`；不会因为 Capabilities 含 app、bundle 或
+  package 字段而返回猜测值；
+- 远端 `unknown command`、`unsupported operation` 或其他 Driver 查询失败沿用统一
+  远端错误映射和 `DeliveryAcknowledged`，不 fallback 到 deprecated HTTP route、
+  Driver/WDA/UiAutomator2 Server 内部端点、其他脚本、Capability 或 Host 工具；
+- 请求发送前 context 取消或截止保持 `DeliveryNotSent`；请求已经尝试但没有收到
+  HTTP 响应时为 `DeliveryUnknown`。即使该查询只读，SDK 也不自动重放，因为重放会
+  产生不同时间点的快照且隐藏首次投递事实。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与
