@@ -2,7 +2,7 @@
 
 > 文档状态：Active  
 > 当前计划项：`DP-111`（已完成；下一项需显式选择）
-> 最后更新：2026-09-03
+> 最后更新：2026-09-04
 
 ## Agent 执行约束
 
@@ -355,9 +355,9 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
 - 实现根包 `Orientation` 强类型、`OrientationPortrait` /
   `OrientationLandscape` 常量以及 `Session.Orientation` /
   `Session.SetOrientation`。
-- 使用 Appium 3 common `GET/POST /session/{sessionId}/orientation` 路由；GET 无
-  请求体，POST 固定发送 `{"orientation":"PORTRAIT"}` 或
-  `{"orientation":"LANDSCAPE"}`。
+- 使用 Appium 3 正式 Appium Device `GET/POST
+  /session/{sessionId}/appium/device/orientation` 路由；GET 无请求体，POST
+  固定发送 `{"orientation":"PORTRAIT"}` 或 `{"orientation":"LANDSCAPE"}`。
 - 读取成功值严格限定为精确大写 JSON string `PORTRAIT` 或
   `LANDSCAPE`；设置成功值严格为 JSON `null`。非精确设置值在发送
   前返回 `CodeInvalidArgument` / `DeliveryNotSent`，不做大小写、空白或
@@ -369,9 +369,12 @@ Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatib
   `DeliveryUnknown` 不重放。
 - 不缓存或自动确认设置后状态，不探测 Driver/Context/Discovery，不执行
   坐标或截图方向换算；排除横屏左右、倒置竖屏选择与 `x/y/z`
-  空间 Rotation API。
+  空间 Rotation API；不 fallback 到 deprecated
+  `/session/{sessionId}/orientation`。
 
-已完成根包 Orientation 实现和协议回归测试。每次读取都返回远端快照，
+已完成根包 Orientation 实现和协议回归测试。实现以 Appium 3.7.0
+（`@appium/base-driver` 10.8.0）的正式 Appium Device route 为协议基线；每次
+读取都返回远端快照，
 每次设置只发送一次有副作用命令；成功响应不被提升为后续屏幕状态
 保证。当前能力矩阵状态为 `Implemented` / `Protocol`；真实 Appium、Driver、
 设备和 Host 组合仍未验证，结果须单独写入 `docs/compatibility.md`。

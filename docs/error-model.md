@@ -154,7 +154,8 @@ Error/Delivery 映射，不增加专用 `ErrorCode`：
   投递不确定；decoder 在 Observer Finished 之前执行；
 - 远端 `unknown command`、`unsupported operation`、旋转被 App/设备拒绝或
   其他 Driver 错误使用统一远程映射和 `DeliveryAcknowledged`；SDK 不根据
-  Driver 名称改变错误，不调用 `/rotation`、平台内部端点或 Host 工具 fallback；
+  Driver 名称改变错误，不调用 deprecated `/session/{sessionId}/orientation`、
+  `/rotation`、平台内部端点或 Host 工具 fallback；
 - 请求发送前的 context 取消或截止保持 `DeliveryNotSent`；已尝试设置但没有
   收到 HTTP 响应时为 `DeliveryUnknown`，不重放、不回滚，也不更新或推测
   本地/远程方向状态。

@@ -45,6 +45,8 @@ func (s *Session) Orientation(ctx context.Context) (Orientation, error) {
 		http.MethodGet,
 		"session",
 		s.id,
+		"appium",
+		"device",
 		"orientation",
 	)
 	if err != nil {
@@ -106,6 +108,8 @@ func (s *Session) SetOrientation(
 		http.MethodPost,
 		"session",
 		s.id,
+		"appium",
+		"device",
 		"orientation",
 	)
 	if err != nil {

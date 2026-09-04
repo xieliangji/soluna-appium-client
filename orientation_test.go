@@ -11,6 +11,11 @@ import (
 	"github.com/xieliangji/soluna-appium-client/contracttest"
 )
 
+const (
+	dp111OrientationPath           = "/session/session%2Fid/appium/device/orientation"
+	dp111DeprecatedOrientationPath = "/session/session%2Fid/orientation"
+)
+
 func TestDP111OrientationRoutesReadFreshSnapshotsAndSetTypedValues(t *testing.T) {
 	for _, test := range []struct {
 		name           string
@@ -29,7 +34,7 @@ func TestDP111OrientationRoutesReadFreshSnapshotsAndSetTypedValues(t *testing.T)
 					writer http.ResponseWriter,
 					request *http.Request,
 				) {
-					if request.RequestURI != "/session/session%2Fid/orientation" {
+					if request.RequestURI != dp111OrientationPath {
 						http.NotFound(writer, request)
 						return
 					}
@@ -96,7 +101,7 @@ func TestDP111OrientationRoutesReadFreshSnapshotsAndSetTypedValues(t *testing.T)
 				}
 				if err := contracttest.MatchRequestURI(
 					request,
-					"/session/session%2Fid/orientation",
+					dp111OrientationPath,
 				); err != nil {
 					t.Fatalf("GET request %d: %v", index, err)
 				}
@@ -125,7 +130,7 @@ func TestDP111OrientationRoutesReadFreshSnapshotsAndSetTypedValues(t *testing.T)
 				}
 				if err := contracttest.MatchRequestURI(
 					request,
-					"/session/session%2Fid/orientation",
+					dp111OrientationPath,
 				); err != nil {
 					t.Fatalf("POST request %d: %v", expected.index, err)
 				}
@@ -349,39 +354,94 @@ func TestDP111OrientationObserverUsesCanonicalIdentities(t *testing.T) {
 	}
 }
 
-func TestDP111SetOrientationRemoteFailureDoesNotFallback(t *testing.T) {
-	session, recorder := newDP111OrientationSession(
-		t,
-		"UiAutomator2",
-		appium.ClientOptions{},
-		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-			writer.Header().Set("Content-Type", "application/json")
-			writer.WriteHeader(http.StatusNotFound)
-			_, _ = writer.Write([]byte(
-				`{"value":{"error":"unknown command","message":"orientation route unavailable"}}`,
-			))
-		}),
-	)
+func TestDP111OrientationRemoteFailuresDoNotFallbackToDeprecatedRoute(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		method         string
+		operation      string
+		legacyResponse string
+		invoke         func(*appium.Session) error
+	}{
+		{
+			name:           "get",
+			method:         http.MethodGet,
+			operation:      "get_orientation",
+			legacyResponse: `{"value":"PORTRAIT"}`,
+			invoke: func(session *appium.Session) error {
+				_, err := session.Orientation(context.Background())
+				return err
+			},
+		},
+		{
+			name:           "set",
+			method:         http.MethodPost,
+			operation:      "set_orientation",
+			legacyResponse: `{"value":null}`,
+			invoke: func(session *appium.Session) error {
+				return session.SetOrientation(
+					context.Background(),
+					appium.OrientationLandscape,
+				)
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			session, recorder := newDP111OrientationSession(
+				t,
+				"UiAutomator2",
+				appium.ClientOptions{},
+				http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+					if request.Method != test.method {
+						http.NotFound(writer, request)
+						return
+					}
 
-	err := session.SetOrientation(
-		context.Background(),
-		appium.OrientationLandscape,
-	)
-	if err == nil || !appium.IsErrorCode(err, appium.CodeUnsupported) {
-		t.Fatalf("error = %v, want unsupported", err)
-	}
-	if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
-		t.Fatalf("delivery = %q, want acknowledged", appium.DeliveryOf(err))
-	}
-	var clientErr *appium.Error
-	if !errors.As(err, &clientErr) {
-		t.Fatalf("error type = %T, want *appium.Error", err)
-	}
-	if clientErr.Operation != "set_orientation" {
-		t.Fatalf("operation = %q, want set_orientation", clientErr.Operation)
-	}
-	if requests := recorder.Requests(); len(requests) != 1 {
-		t.Fatalf("remote failure must not trigger fallback: got %d requests", len(requests))
+					writer.Header().Set("Content-Type", "application/json")
+					switch request.RequestURI {
+					case dp111OrientationPath:
+						writer.WriteHeader(http.StatusNotFound)
+						_, _ = writer.Write([]byte(
+							`{"value":{"error":"unknown command","message":"orientation route unavailable"}}`,
+						))
+					case dp111DeprecatedOrientationPath:
+						_, _ = writer.Write([]byte(test.legacyResponse))
+					default:
+						http.NotFound(writer, request)
+					}
+				}),
+			)
+
+			err := test.invoke(session)
+			if err == nil || !appium.IsErrorCode(err, appium.CodeUnsupported) {
+				t.Fatalf("error = %v, want unsupported", err)
+			}
+			if appium.DeliveryOf(err) != appium.DeliveryAcknowledged {
+				t.Fatalf("delivery = %q, want acknowledged", appium.DeliveryOf(err))
+			}
+			var clientErr *appium.Error
+			if !errors.As(err, &clientErr) {
+				t.Fatalf("error type = %T, want *appium.Error", err)
+			}
+			if clientErr.Operation != test.operation {
+				t.Fatalf("operation = %q, want %q", clientErr.Operation, test.operation)
+			}
+			requests := recorder.Requests()
+			if len(requests) != 1 {
+				t.Fatalf(
+					"remote failure must not trigger deprecated fallback: got %d requests",
+					len(requests),
+				)
+			}
+			if err := contracttest.MatchMethod(requests[0], test.method); err != nil {
+				t.Fatalf("orientation request method: %v", err)
+			}
+			if err := contracttest.MatchRequestURI(
+				requests[0],
+				dp111OrientationPath,
+			); err != nil {
+				t.Fatalf("orientation request URI: %v", err)
+			}
+		})
 	}
 }
 
@@ -395,7 +455,7 @@ func TestDP111SetOrientationUnknownDeliveryIsNotReplayed(t *testing.T) {
 		http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			calls.Add(1)
 			if request.Method != http.MethodPost ||
-				request.RequestURI != "/session/session%2Fid/orientation" {
+				request.RequestURI != dp111OrientationPath {
 				http.NotFound(writer, request)
 				return
 			}

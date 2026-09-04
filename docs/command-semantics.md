@@ -229,12 +229,16 @@ App 是否已经进入后台；不提供定时恢复、后台计时器或状态�
 
 ## Session Orientation（DP-111 已实现）
 
-Orientation 使用根包 `Session` 和 Appium 3 common route：
+Orientation 使用根包 `Session` 和 Appium 3 正式 Appium Device route：
 
 | API | HTTP | 路径 | 请求体 | 成功 value |
 |---|---|---|---|---|
-| `Session.Orientation` | GET | `/session/{sessionId}/orientation` | 无 | JSON string `"PORTRAIT"` 或 `"LANDSCAPE"` |
-| `Session.SetOrientation` | POST | `/session/{sessionId}/orientation` | `{"orientation":"PORTRAIT"}` 或 `{"orientation":"LANDSCAPE"}` | JSON `null` |
+| `Session.Orientation` | GET | `/session/{sessionId}/appium/device/orientation` | 无 | JSON string `"PORTRAIT"` 或 `"LANDSCAPE"` |
+| `Session.SetOrientation` | POST | `/session/{sessionId}/appium/device/orientation` | `{"orientation":"PORTRAIT"}` 或 `{"orientation":"LANDSCAPE"}` | JSON `null` |
+
+该正式 Appium Device route 以 Appium 3.7.0（`@appium/base-driver` 10.8.0）为
+协议基线。Appium 3.6.0 及更早版本的裸 `/session/{sessionId}/orientation`
+属于 legacy JSONWP route；SDK 不使用该入口，也不在正式 route 失败后自动降级。
 
 GET 不带 body，也不发送 `Content-Type`；POST 发送只包含 `orientation` 的
 JSON object 并设置 `Content-Type: application/json`。Session ID 按统一 Endpoint
@@ -261,7 +265,8 @@ JSON object 并设置 `Content-Type: application/json`。Session ID 按统一 En
 
 命令不本地门禁 XCUITest 或 UiAutomator2，不读取 Runtime Discovery、Context、
 Capabilities 或几何状态。远端 unsupported 沿用统一命令错误，不改走 WDA、
-UiAutomator2 Server、Host 工具、Execute Method 或 `/rotation` fallback。
+UiAutomator2 Server、Host 工具、Execute Method、deprecated
+`/session/{sessionId}/orientation` 或 `/rotation` fallback。
 `DeliveryUnknown` 时不重放设置请求或推测远程状态。本公共类型不区分
 landscape left/right 和 portrait upside-down，也不表示 `/rotation` 的 `x/y/z`
 空间旋转。Orientation 不自动转换 Rect、ViewportRect、Actions 或 Screenshot。

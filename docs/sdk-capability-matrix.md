@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-09-03
+> 最后更新：2026-09-04
 
 ## 1. 文档目的
 
@@ -162,7 +162,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 |---|---|---|---|---|---|---|---|
 | CTX-001 | Context 列表、当前 Context、切换 Context | Session method | Implemented | Appium 3 裸 `/context(s)` commands + Web CSS viewport/DOM Rect strategy | 精确 `NATIVE_APP` 为 Native，精确 `WEBVIEW`、非空后缀 `WEBVIEW_` 和精确 `CHROMIUM` 为 Web；Unknown 不 fallback，组合 Find/Tap 为 `CodeUnsupported` + `DeliveryNotSent`；Context 不缓存；Safari/Hybrid 组合仍需真实验证 | Protocol | `context.go`, `context_test.go`, `element_context_test.go`, `element.go`, `docs/design.md`, `docs/coordinate-system.md`, `docs/command-semantics.md`, `docs/error-model.md` |
 | NAV-001 | `Session.BackgroundApp` 将当前 App 放入后台且不自动恢复 | Session method | Implemented | Appium 3 `mobile: backgroundApp` Execute Method；固定 `{"script":"mobile: backgroundApp","args":[{"seconds":-1}]}`；Operation/Observer identity 为 `background_app`；成功 value 严格为 `null` | Execute Method 是正式入口；恢复由 `ActivateApp` 显式执行；不提供定时恢复或 deprecated HTTP route fallback | Protocol | `navigation.go`, `navigation_test.go`, `docs/design.md`（AD-031）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
-| NAV-002 | `Session.Orientation` / `Session.SetOrientation`；`OrientationPortrait` / `OrientationLandscape` | Session method | Implemented | Appium 3 common `GET/POST /session/{sessionId}/orientation`；精确大写强类型；`get_orientation` / `set_orientation` identity；设置成功值严格为 `null` | XCUITest / UiAutomator2；只表达 Portrait/Landscape 分类；不缓存、规范化、确认、fallback 或执行空间 Rotation | Protocol | `orientation.go`, `orientation_test.go`, `docs/design.md`（AD-032）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
+| NAV-002 | `Session.Orientation` / `Session.SetOrientation`；`OrientationPortrait` / `OrientationLandscape` | Session method | Implemented | Appium 3 正式 Appium Device `GET/POST /session/{sessionId}/appium/device/orientation`；精确大写强类型；`get_orientation` / `set_orientation` identity；设置成功值严格为 `null` | 协议基线 Appium 3.7.0（`@appium/base-driver` 10.8.0）；XCUITest / UiAutomator2；只表达 Portrait/Landscape 分类；不缓存、规范化、确认、fallback 或执行空间 Rotation | Protocol | `orientation.go`, `orientation_test.go`, `docs/design.md`（AD-032）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |
 | NAV-004 | 通用 `Back` | Session method | Excluded | Driver-specific navigation | Android 物理 Back 与 iOS 启发式导航不等价 | None | 平台包可单独评审 |
 | DEV-001 | 活动 App ID | Session method | Accepted | Driver active app/package info | iOS bundle ID / Android package | None | 定义统一只读结果 |
@@ -175,12 +175,14 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 > unsupported/command error，不改走 deprecated HTTP compatibility route、WDA、
 > UiAutomator2 Server 或 Host 工具 fallback。
 
-> NAV-002 当前只有 Appium 3.6.0、XCUITest Driver 12.1.0 与
-> UiAutomator2 Driver 8.2.0 的上游源码观察：Appium 登记 common Orientation route，
-> XCUITest/WDA 与 UiAutomator2 均实现读写。XCUITest/WDA 会将横屏
-> 左右和倒置竖屏折叠为两类返回值。这些不是 `Verified` 证据；若远端
-> 拒绝 common route，SDK 只返回统一远程错误，不调用 Driver/WDA/
-> UiAutomator2 Server 内部端点、Host 工具或 `/rotation` fallback。
+> NAV-002 当前有 Appium 3.7.0（`@appium/base-driver` 10.8.0）、XCUITest
+> Driver 12.1.0 与 UiAutomator2 Driver 8.2.0 的上游源码观察：Appium 登记
+> 正式 Appium Device Orientation route，并将裸 `/orientation` 标记为 deprecated；
+> Appium 3.6.0（base-driver 10.7.2）只在 JSONWP 分组中登记裸 route。
+> XCUITest/WDA 与 UiAutomator2 均实现读写，前者会将横屏左右和倒置竖屏折叠为
+> 两类返回值。这些不是 `Verified` 证据；若远端拒绝正式 route，SDK 只返回统一
+> 远程错误，不调用 legacy route、Driver/WDA/UiAutomator2 Server 内部端点、
+> Host 工具或 `/rotation` fallback。
 
 ### 5.6 应用控制、录屏与脚本
 
