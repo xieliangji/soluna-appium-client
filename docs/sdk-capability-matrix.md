@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-09-04
+> 最后更新：2026-09-05
 
 ## 1. 文档目的
 
@@ -82,6 +82,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 - Go：1.26.5；
 - Appium：3.x；
+- 设备范围：仅支持 iOS 和 Android 真机；不支持 iOS Simulator 或 Android Emulator；
 - XCUITest 主线设备：iOS 17+；
 - XCUITest iOS 17.x：主要在 macOS Host 验证；
 - XCUITest iOS 18+：在预安装/外部 WDA 与 RemoteXPC 条件满足时，纳入 macOS、Windows 和 Linux Host；
@@ -89,6 +90,8 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 - UiAutomator2：目标 Android/Driver 组合以 `docs/compatibility.md` 的真实记录为准。
 
 表中的“Host/版本约束”只记录能力本身的关键门槛。完整 Driver/WDA/Host 组合不得复制到本文档，应维护在 `docs/compatibility.md`。
+
+文档中的模拟器上游行为说明仅作为协议背景，不构成 SDK 支持或兼容性验证范围。
 
 ## 5. 根包能力
 
@@ -224,7 +227,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 
 ## 6. XCUITest 平台能力
 
-XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 Appium Host OS。详细版本组合维护在 `docs/compatibility.md`。
+XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机设备类型和 Appium Host OS。详细版本组合维护在 `docs/compatibility.md`。
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
@@ -238,7 +241,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 | XCUI-008 | Syslog / Crashlog Typed Stream | Session stream | Architecture | RemoteXPC/BiDi | 具体类型和消费语义需验证 | None | 依赖 BIDI-001/002 |
 | XCUI-009 | Battery Info | Platform function | Excluded | XCUITest execute method | UI 自动化价值不足 | None | 保留 `ExecuteScript` 逃生口 |
 | XCUI-010 | `startPerfRecord` / `xctrace` | Platform function | Excluded | macOS Xcode tools | macOS-only | None | 不进入跨 Host 核心 SDK |
-| XCUI-011 | Simulator-only API 集合 | Platform function | Excluded | simctl / Simulator framework | macOS Simulator only | None | 当前项目以真机为主 |
+| XCUI-011 | Simulator-only API 集合 | Platform function | Excluded | simctl / Simulator framework | macOS Simulator only | None | 项目仅支持真机，模拟器不在支持范围内 |
 
 ## 7. UiAutomator2 平台能力
 
@@ -262,7 +265,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 | INF-005 | HTTP Contract Test 工具 | Internal / test infrastructure | Implemented | `contracttest` | Test-only | Protocol | `contracttest/` |
 | INF-006 | BiDi Contract Test 工具 | Internal / test infrastructure | Architecture | Fake WebSocket/BiDi Server | Test-only | None | 与 BIDI-001 同步设计 |
 | INF-007 | SDK 能力矩阵维护 | Documentation | Implemented | 本文档 | 每个公共能力变更必须更新 | None | `docs/sdk-capability-matrix.md` |
-| INF-008 | 真实兼容性矩阵 | Documentation | Accepted | `docs/compatibility.md` | 当前文件待填充 | None | 按真实设备组合登记 |
+| INF-008 | 真实兼容性矩阵 | Documentation | Implemented | Runtime Profile + 逐能力验证记录 | 文档结构已建立；实际环境和跨 Host 结果仍待 DP-141 | None | `docs/compatibility.md`；DP-140 完成，尚无真实 Profile 或 `Verified` 记录 |
 
 ## 9. 显式排除项
 
@@ -278,7 +281,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机/模拟器和 A
 | `Displayed` / `Enabled` / `Selected` | 当前无法提供满足项目要求的确定性语义 |
 | XCUITest Battery Info | 与 UI 执行主链价值弱 |
 | XCUITest Instruments Perf Record | 依赖 macOS/Xcode，不满足跨 Host 主线 |
-| Simulator-only 平台命令 | 当前真机优先，且不能跨 Host |
+| 模拟器支持及专用命令 | 项目仅支持 iOS 和 Android 真机，排除 iOS Simulator 与 Android Emulator |
 | 完整复制所有 Driver Execute Methods | 扩大维护面但不能提高核心执行可靠性 |
 
 `ExecuteScript` 仍可用于调用方主动访问未封装扩展，但这不构成 SDK 对该扩展的兼容承诺。
@@ -337,7 +340,7 @@ Runtime Discovery Catalog 类型
 3. 标明调用方使用的公共入口；
 4. 标记 SDK 状态；
 5. 写明协议机制；
-6. 写明最低设备 OS、Driver/WDA、真机/模拟器和 Host 限制；
+6. 写明最低设备 OS、Driver/WDA、真机设备类型和 Host 限制；
 7. 写明资源边界；
 8. 写明测试证据或下一步；
 9. 如改变高层结构，同步更新 `docs/architecture.md`；如改变跨领域实现规则或设计决策，同步更新 `docs/design.md`。

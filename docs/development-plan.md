@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-130` 已完成；下一项需显式选择）
+> 当前计划项：暂无当前项（`DP-140` 已完成；下一项需显式选择）
 > 最后更新：2026-09-05
 
 ## Agent 执行约束
@@ -42,7 +42,7 @@
 | 20 | `DP-120` 活动 App ID | `DEV-001` | Done | — |
 | 21 | `DP-121` 设备时间 | `DEV-002` | Done | — |
 | 22 | `DP-130` Deep Link | `NAV-003` | Done | — |
-| 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Queued | — |
+| 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Done | — |
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
 | 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003` | Queued | DP-140 |
 | 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Queued | DP-010, DP-140 |
@@ -264,7 +264,7 @@ fallback、iframe 遍历或 stale 重定位；Context 列表、当前 Context �
 fallback 到替代路由；Unknown Context 下组合
 Find/Tap 返回主体操作的 `CodeUnsupported` + `DeliveryNotSent`，成功的
 `CurrentContext` 探针只保留在自身 Observer 事件中。已记录 Appium 3、XCUITest/Safari/WKWebView、
-UiAutomator2/Android WebView、Driver/WDA/Chromedriver、设备 OS、真机/模拟器和
+UiAutomator2/Android WebView、Driver/WDA/Chromedriver、设备 OS、真机设备类型和
 Host OS 的分组合规性验证边界；真实结果仍需写入 `docs/compatibility.md`。
 
 排除运行时代码。
@@ -446,10 +446,16 @@ UiAutomator2 Driver 8.2.0 的源码观察只作为协议依据，真实 Driver�
 - Runtime Profile 和逐能力验证记录；
 - SDK、Appium、Driver、WDA/UiAutomator2 Server、设备 OS/类型、Host OS、连接和启动方式；
 - iOS 17.x macOS、iOS 18+ RemoteXPC 三 Host、低于 iOS 17 Legacy Lane；
-- Android/UiAutomator2 对等结构；
+- Android/UiAutomator2 对等结构；iOS/Android 均只纳入真机，不纳入 Simulator/Emulator；
 - `Official`、`BestEffort` 与本项目 `Verified` 的区别。
 
 不得把未实测组合标记为 `Verified`。
+
+已完成 Runtime Profile 字段/模板、逐能力结果与证据记录规则，以及 iOS 和
+Android 的真机待验证通道，明确排除 Simulator/Emulator。区分 SDK Host、Appium Host
+和准备/构建 Host，上游 `Official` / `BestEffort` 与项目实测结果分别记录。INF-008 文档结构为
+`Implemented` / `None`；当前无实际 Profile 或 `Verified` 记录，DP-141 仍待
+实际环境，不在本项执行。
 
 ### DP-141 跨 Host Smoke
 

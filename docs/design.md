@@ -581,7 +581,7 @@ viewport 或 Screenshot 快照失效。SDK 不为这些命令建立 Session 级�
 Web Context 的协议设计不扩大真实环境兼容承诺。每个组合都要分别记录并验证：
 
 - Appium 3、XCUITest 或 UiAutomator2 Driver、WDA/UiAutomator2 Server 版本；
-- iOS/Android 版本、真机或模拟器、Safari/WebKit 或嵌入式 WebView/Chrome 版本；
+- iOS/Android 版本、真机型号与设备类型、Safari/WebKit 或嵌入式 WebView/Chrome 版本；
 - WebView 调试能力、Chromedriver 与 WebView 的匹配关系、相关 capability/setting；
 - Context 列表和切换结果、CSS viewport 尺寸、页面滚动、orientation、缩放、
   status bar/键盘状态以及 Actions 点击结果；
@@ -1282,7 +1282,7 @@ Appium 版本
 Driver 版本
 WDA / UiAutomator2 Server 版本
 设备 OS
-真机或模拟器
+真机型号与设备类型
 Appium Host OS
 连接与启动方式
 具体能力
@@ -1293,10 +1293,13 @@ Appium Host OS
 当前产品边界为：
 
 - Appium 3.x 是主协议基线；
+- 仅支持 iOS 和 Android 真机；iOS Simulator 与 Android Emulator 不进入支持范围或兼容性验证；
 - iOS 17+ 是 XCUITest 主线设备范围；
 - iOS 17 以下进入 Legacy Lane，不反向限制主线 API；
 - macOS、Windows 和 Linux 的具体支持结论只在真实兼容性矩阵中登记；
 - 每个 XCUITest 平台能力都要单独记录最低 iOS、Driver/WDA、设备类型和 Host 条件。
+
+文档保留的模拟器上游行为仅用于说明协议背景，不构成 SDK 对模拟器的支持承诺。
 
 支持状态建议使用：
 
