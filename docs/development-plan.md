@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-120`（已完成；下一项需显式选择）
+> 当前计划项：`DP-121`（已完成；下一项需显式选择）
 > 最后更新：2026-09-04
 
 ## Agent 执行约束
@@ -40,7 +40,7 @@
 | 18 | `DP-110` 应用放入后台 | `NAV-001` | Done | — |
 | 19 | `DP-111` 屏幕方向 | `NAV-002` | Done | — |
 | 20 | `DP-120` 活动 App ID | `DEV-001` | Done | — |
-| 21 | `DP-121` 设备时间 | `DEV-002` | Queued | — |
+| 21 | `DP-121` 设备时间 | `DEV-002` | Done | — |
 | 22 | `DP-130` Deep Link | `NAV-003` | Queued | — |
 | 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Queued | — |
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
@@ -408,9 +408,19 @@ UiAutomator2 Driver 8.2.0 的源码观察只作为协议依据，真实 Driver�
 
 ### DP-121 设备时间
 
-- 实现可校验的设备时间结果。
-- 不静默回退 Host 时间。
-- 记录 Driver/Host 差异；排除时间和时区设置。
+- 实现根包 `Session.DeviceTime(ctx) (time.Time, error)`，使用 Appium common
+  Device Time GET route 返回设备时间快照。成功 value 精确校验为
+  `YYYY-MM-DDTHH:mm:ss±HH:MM`，并保留数字 UTC 偏移和秒精度。
+- 固定 `get_device_time` Error/Observer identity；每次只读取一次且不缓存、
+  校正、重试或后置确认。无效响应返回 `CodeResponseInvalid` 和零值，
+  不猜测其他时间格式。
+- 不静默回退 Host 时间，不按 `automationName` 做 common command 门禁，不调用
+  Host 工具或内部 Driver route；记录 XCUITest Simulator、XCUITest 真机和
+  Android Driver 取值路径差异，排除时间和时区设置能力。
+
+已完成根包 Device Time 实现和协议回归测试。当前能力矩阵状态为
+`Implemented` / `Protocol`；上游源码观察仅作为协议依据，真实 Driver、
+设备和 Host 组合仍未验证，不标记为 `Verified`。
 
 ### DP-130 Deep Link
 

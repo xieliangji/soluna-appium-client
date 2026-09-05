@@ -309,6 +309,48 @@ Execute Method 不可用或远端失败时不改走 deprecated Android
 工具。SDK 不返回 XCUITest 的 pid/name/process arguments，不查询 Android activity，
 也不枚举进程或已安装应用；`DeliveryUnknown` 时只报告投递事实，不自动重放读取。
 
+## Session Device Time（DP-121 已实现）
+
+`Session.DeviceTime` 使用 Appium common Device Time 命令读取当前
+Driver 报告的时间快照：
+
+| API | HTTP | 路径 | 请求体 | 成功 value | 公共结果 |
+|---|---|---|---|---|---|
+| `Session.DeviceTime` | GET | `/session/{sessionId}/appium/device/system_time` | 无 | 精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` JSON string | 保留该偏移的秒精度 `time.Time` |
+
+GET 不带 body，也不发送 `Content-Type`；Session ID 按统一 Endpoint
+规则作为独立路径段转义。方法不接受 format 参数，使用当前
+XCUITest 和 Android Driver 公开定义的默认 Day.js 格式
+`YYYY-MM-DDTHH:mm:ssZ`。其 `Z` 是格式标记，线上值的时区部分是
+带冒号的显式数字 UTC 偏移，例如 `+08:00`。
+
+成功 value 必须是有效 Unicode JSON string，并精确包含四位年、
+两位日期/时间字段、大写 `T`、秒精度和 `±HH:MM` 偏移。
+解码还要验证实际日历值、时间值和偏移范围，并对解析结果
+执行固定格式回转。`null`、非 string、空字符串、UTC designator
+`Z`、小数秒、紧凑偏移、前后空白、非法 UTF-8/surrogate、无效
+日期/偏移和 Android Driver 在内部解析失败后可能返回的任意
+原始文本，均返回 `CodeResponseInvalid` / `DeliveryAcknowledged`
+和 `time.Time{}`；客户端不 trim、补全、规范化或猜测其他格式。
+
+解码后的 `time.Time` 保留远端的时间点和数字 UTC 偏移，
+nanosecond 为零。返回值不包含远端未提供的 IANA 时区名称，
+不根据 SDK Host 的本地时区匹配名称。固定 Error/Observer identity 为
+`get_device_time`，命令级 decoder 在统一执行链中、Observer Finished
+之前完成全部校验。
+
+该 common command 不按 `automationName` 本地门禁，也不预读 Runtime
+Discovery、Capabilities、Context 或 Healthy。每次调用只发送一次 GET
+并返回该次快照，不缓存、校正、与 Host 时钟比较、重试或后置
+确认。远端 unsupported 或失败时沿用统一错误，不改用 POST format、
+`mobile: getDeviceTime`、Driver 内部端点、Host 工具或 `time.Now`
+fallback；`DeliveryUnknown` 时也不重放。本能力不提供设备时间或
+时区的设置入口。
+
+XCUITest Simulator 可能使用 Appium Host 时钟，XCUITest 真机和
+Android 的 Driver 内部取值路径也不同；成功 value 本身不含来源
+provenance。这些差异只是协议与兼容性边界，不改变公共响应合同。
+
 ## Session Pull Logs（DP-081 已实现）
 
 Pull Logs 只提供一次性的 Session 级批量读取。通过根包统一 HTTP 执行链实现以下

@@ -837,6 +837,57 @@ Execute Method 失败时不 fallback 到 deprecated Android
 不是设备兼容性证据；真实 Appium、Driver、WDA/UiAutomator2 Server、设备 OS 和
 Host 组合仍须写入 `docs/compatibility.md` 后才可称为 `Verified`。
 
+### 7.10 设备时间（DP-121）
+
+DP-121 在根包 `Session` 上提供当前 Driver 报告时间的类型化快照：
+
+```go
+func (s *Session) DeviceTime(ctx context.Context) (time.Time, error)
+```
+
+该方法使用 Appium common Device Time 的无参 GET route：
+
+```text
+GET /session/{sessionId}/appium/device/system_time
+```
+
+请求不带 body，使用 Driver 定义的默认 `YYYY-MM-DDTHH:mm:ssZ`
+格式；其中 `Z` 是 Driver 使用的 Day.js 格式标记，实际成功字符串
+必须精确为 `YYYY-MM-DDTHH:mm:ss±HH:MM`。SDK 只接受有效 Unicode
+JSON string，并在统一响应 decoder 中校验固定宽度、分隔符、
+日历时间和显式数字 UTC 偏移。`null`、其他 JSON 类型、`Z`
+UTC designator、小数秒、紧凑偏移、空白、非法日期/偏移和 Driver
+回退的任意原始文本都是响应格式错误，不猜测替代格式。
+
+公共 `time.Time` 精度固定为秒，保留远端字符串表达的时间点
+和数字 UTC 偏移。该 route 不提供 IANA 时区标识，SDK 不根据
+偏移猜测时区名称，也不公开任意 format 参数或原始字符串结果。
+解码使用明确的 UTC location 避免依赖 SDK Host 的本地时区，并通过
+格式回转拒绝非规范表达。
+
+Device Time 是 common command，不按 `automationName` 做本地门禁；
+XCUITest、UiAutomator2 和其他 Driver 的实际支持由远端结果表达。
+每次调用只发送一次 GET 并使用 `get_device_time` 作为固定
+Error/Observer identity；不缓存、校正、比较 Host 时间、自动重试或
+后置确认。远端失败或响应无法校验时返回零值和 error，
+不使用 `time.Now` 伪造成功结果；`DeliveryUnknown` 时也不重放，
+因为第二次读取会是另一时刻的快照。
+
+Driver 的取值路径并不等价：XCUITest Driver 在 Simulator 上明确
+使用 Appium Host 当前时间和偏移，真机通过 Lockdown 读取设备
+timestamp 与 UTC offset；UiAutomator2 所使用的 Android Driver 在
+Driver 内部通过设备端 `date` 命令读取并格式化，内部解析失败时
+可能直接返回原始输出。前一种 Simulator 结果无法仅从成功
+响应中区分，后一种非规范原始输出会被 SDK 拒绝。这些是远端
+Driver 实现差异；SDK 本身不调用 `adb`、`xcrun`、Lockdown 或其他
+Host 工具，也不提供时间或时区设置能力。
+
+当前 Appium 3.6.0（`@appium/base-driver` 10.7.2）、XCUITest Driver
+12.1.0 与 UiAutomator2 Driver 8.2.0（Android Driver 14.0.2）的上游
+源码提供上述 route、默认格式和 Driver 取值路径依据。这些只是
+协议设计输入，不是真实设备兼容性证据；真实 Appium、Driver、设备和
+Host 组合仍须写入 `docs/compatibility.md` 后才可称为 `Verified`。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
@@ -1254,6 +1305,7 @@ alerts.go           Alert
 keyboard.go         Keyboard
 orientation.go      Orientation
 active_app.go       Active App ID
+device_time.go      Device Time
 navigation.go       Background、Deep Link 等导航行为
 recording.go        Recording
 timeouts.go         Timeouts
@@ -1327,6 +1379,7 @@ internal/bidi       BiDi 协议实现
 | AD-031 | Accepted | Background App 使用 Appium 3 正式 `mobile: backgroundApp` Execute Method；固定 `seconds=-1` 表达不恢复；成功 value 严格为 `null`；固定 `background_app` identity；不回退到 deprecated HTTP route、不探测状态、不自动恢复或重试 | 避免新 SDK 绑定已从 Appium 3 core 迁出的 `/appium/app/background` compatibility route，同时保留 XCUITest/Android Driver 的统一无恢复语义 |
 | AD-032 | Accepted | Orientation 使用根包 Session 的 Appium 3 正式 Appium Device route（`/session/{sessionId}/appium/device/orientation`）和精确 `PORTRAIT` / `LANDSCAPE` 强类型；读取为无缓存快照，设置只接受有限枚举且成功 value 严格为 `null`；不回退 deprecated JSONWP route、不确认后续状态、不规范化值或公开空间 Rotation | 保留两 Driver 共有的二维方向事实，避免伪造横屏左右/倒置信息或把设置响应当成持久状态保证 |
 | AD-033 | Accepted | `Session.ActiveAppID` 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 保留为空字符串无焦点快照；未知 Driver 本地拒绝，不从 App/bundle/package Capability 猜测，不公开进程信息或执行 fallback | 在保持平台标识含义和 Driver 探测差异的同时提供统一只读入口，并避免初始启动配置被误当成动态前台状态 |
+| AD-034 | Accepted | `Session.DeviceTime` 使用 Appium common Device Time GET route 的固定默认格式，将精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` 解码为保留数字 UTC 偏移的秒精度 `time.Time`；不猜测其他格式或时区名、不按 Driver 本地门禁，不缓存、重试、回退 Host 时间或提供时间/时区设置 | 交付可校验的时间点与偏移事实，同时显式保留 XCUITest Simulator 可来自 Host 时钟、真机与 Android 取值路径不同的兼容性边界 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

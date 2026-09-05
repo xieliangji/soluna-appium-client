@@ -184,6 +184,32 @@ Observer operation identity，不增加专用 `ErrorCode`：
   HTTP 响应时为 `DeliveryUnknown`。即使该查询只读，SDK 也不自动重放，因为重放会
   产生不同时间点的快照且隐藏首次投递事实。
 
+## 设备时间错误（DP-121 已实现）
+
+`Session.DeviceTime` 使用 `get_device_time` 作为固定 Error 和 Observer
+operation identity，并将 Appium common Device Time GET 命令的成功 value
+解析为秒精度 `time.Time`：
+
+- 成功 value 只接受精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` JSON string。
+  `null`、非 string、空字符串、`Z`、小数秒、紧凑偏移、空白、
+  无效日历/时间/偏移、非法 UTF-8 或未配对 surrogate 均返回
+  `CodeResponseInvalid` / `DeliveryAcknowledged`，并返回 `time.Time{}`；不交付
+  部分解析结果。
+- 返回的 `time.Time` 保留远端数字 UTC 偏移，不使用 Host 的
+  `time.Local`，也不根据偏移推测 IANA 时区。SDK 不公开或默认发送
+  format 参数，不对原始文本做 trim、规范化或其他格式猜测。
+- 远端 `unknown command`、`unsupported operation`、Session 丢失或其他
+  Driver 错误继续沿用统一远端错误映射；不因 `automationName`
+  做本地门禁，也不 fallback 到 `mobile: getDeviceTime`、POST format、Driver 内部
+  route、Host 时钟或其他工具。
+- 请求发送前 context 取消/截止保持 `DeliveryNotSent`；已尝试请求但
+  未收到 HTTP 响应时为 `DeliveryUnknown`，收到响应（包括格式错误）
+  时为 `DeliveryAcknowledged`。该只读快照在 `DeliveryUnknown` 时也不重放，
+  因为重放会返回不同时刻的快照并隐藏首次投递事实。
+- XCUITest Simulator 可报告来自 Host 时钟的成功值，这不是本地 fallback，
+  也无法仅从该响应识别；真机和 Android 的 Driver 取值差异同样
+  不新增公共错误码。本能力不包含时间或时区设置。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与

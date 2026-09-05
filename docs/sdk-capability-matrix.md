@@ -166,7 +166,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | NAV-003 | Deep Link | Session method | Accepted | Driver execute method / navigation | iOS 与 Android 参数和最低版本不同 | None | 根包按 AutomationName 映射 |
 | NAV-004 | 通用 `Back` | Session method | Excluded | Driver-specific navigation | Android 物理 Back 与 iOS 启发式导航不等价 | None | 平台包可单独评审 |
 | DEV-001 | `Session.ActiveAppID` | Session method | Implemented | 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 映射为空字符串无焦点快照；固定 `get_active_app_id` identity | 只支持 XCUITest / UiAutomator2；不从 App/bundle/package Capability 猜测，不公开进程/安装信息，不 fallback 到 deprecated 或内部 route | Protocol | `active_app.go`, `active_app_test.go`, `docs/design.md`（AD-033）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
-| DEV-002 | 设备时间 | Session method | Accepted | Appium common command | Driver/Host 获取路径不同 | None | 返回可校验时间事实，不猜格式 |
+| DEV-002 | `Session.DeviceTime` | Session method | Implemented | Appium common `GET /session/{sessionId}/appium/device/system_time`；固定默认格式精确解码为保留数字 UTC 偏移的秒精度 `time.Time`；固定 `get_device_time` identity | XCUITest Simulator 可使用 Host 时钟，真机使用 Lockdown；Android Driver 通过设备 `date` 取值且内部解析失败时可返回原始文本；不猜其他格式、不本地 Host fallback、不提供时间/时区设置 | Protocol | `device_time.go`, `device_time_test.go`, `docs/design.md`（AD-034）, `docs/command-semantics.md`, `docs/error-model.md`；真实版本/设备/Host 组合仍待兼容性记录 |
 
 > NAV-001 当前只有 Appium 3.6.0、XCUITest Driver 12.1.0 与 UiAutomator2 Driver
 > 8.2.0（其 Android Driver 14.0.2）的上游源码观察：两者都注册并实现
@@ -190,6 +190,14 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 > `mobile: getCurrentPackage` 并返回 focused package，没有焦点时可为 `null`；旧 Android
 > `current_package` HTTP route 已标记 deprecated。上述不是 `Verified` 证据；真实
 > Appium、Driver、WDA/UiAutomator2 Server、设备与 Host 组合仍需单独记录。
+
+> DEV-002 当前有 Appium 3.6.0（`@appium/base-driver` 10.7.2）、
+> XCUITest Driver 12.1.0 与 UiAutomator2 Driver 8.2.0（Android Driver
+> 14.0.2）的上游源码观察：common GET route 使用默认
+> `YYYY-MM-DDTHH:mm:ssZ` 格式；XCUITest Simulator 使用 Host 时钟，
+> 真机通过 Lockdown 取值，Android Driver 则在 Driver 内部读取设备
+> `date`。上述不是 `Verified` 证据；真实 Appium、Driver、设备与 Host
+> 组合仍需单独记录。
 
 ### 5.6 应用控制、录屏与脚本
 
