@@ -196,6 +196,57 @@ Keyboard 实现的响应 decoder 在统一 `executeCommand` 的 decoder slot 中
 输入法服务状态，并可能在 Driver 内部使用平台按键和等待。上述内部差异不改变
 本 SDK 的路由和返回契约，真实版本组合仍需兼容性验证。
 
+## Session Deep Link（DP-130 已实现）
+
+`Session.DeepLink(ctx, url, appID) error` 通过固定的
+`POST /session/{sessionId}/execute/sync` 发起一次 `mobile: deepLink` 请求。
+只按创建 Session 后远端确认的精确 `automationName` 映射目标 App 参数：
+
+| AutomationName | 非空 appID 的请求体 | 成功 value |
+|---|---|---|
+| `XCUITest` | `{"script":"mobile: deepLink","args":[{"url":"<url>","bundleId":"<appID>"}]}` | JSON `null` |
+| `UiAutomator2` | `{"script":"mobile: deepLink","args":[{"url":"<url>","package":"<appID>"}]}` | JSON `null` |
+
+空 `appID` 在两个分支都省略目标字段，发送
+`{"script":"mobile: deepLink","args":[{"url":"<url>"}]}`，由 Driver/操作系统决定
+处理应用；不发送空目标或 `null`，不从 `bundleId`、`appPackage`、`app`、
+`browserName` 等 Capability 或当前活动 App 补全。未知、大小写不同或带空白的
+AutomationName 在本地返回 `CodeUnsupported` / `DeliveryNotSent`。原始创建请求
+或调用方修改过的 Capability 副本不参与选择。
+
+`url` 必须非空；URL 和 App ID 必须是有效 UTF-8。SDK 原样发送其他字符串，
+保留自定义 scheme、大小写、空白、Unicode、百分号转义、query 和 fragment，
+不解析、补全或重新编码 URL，也不猜测目标标识语法。URI 有效性、目标是否安装、
+是否注册 URI handler，以及平台关联配置均由远端决定。请求发送
+`Content-Type: application/json`，Session ID 按统一 Endpoint 规则作为独立路径段
+转义；命令超时、响应上限和诊断脱敏都复用根包统一执行链。
+
+Error/Observer identity 固定为 `deep_link`。成功 value 严格要求 JSON `null`，
+在统一 decoder slot 内、Observer Finished 之前完成校验。成功只表示 Driver
+返回成功响应，不保证目标 App 已启动、页面已到达或后续状态不变；系统可能弹出
+应用选择器，或激活/切换应用并触发应用业务逻辑。SDK 不读取 Discovery、Healthy、
+Context、AppState 或 ActiveAppID，不自动等待、断言、重试、回滚或恢复。
+`DeliveryUnknown` 时不会重放。此入口不包含浏览器历史、通用 Back、Context
+切换、Safari 地址栏操作或其他导航 fallback，也不公开 Android `waitForLaunch`
+等平台选项。
+
+协议依据来自指定版本的官方源码和文档：
+
+- [XCUITest Driver 12.1.0 参数注册](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/execute-method-map.ts)
+  与 [navigation 实现](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/commands/navigation.ts)
+  将 `url` 定为必需、`bundleId` 定为可选，命令返回 void；源码标注命令自 Driver
+  4.17 提供，要求 iOS 16.4+ / Xcode 14.3+。这些是远端 Driver/WDA 的环境条件，
+  SDK 不直接运行 Xcode 或其他 Host 工具，也不从版本 Capability 自动推断可用性。
+- [UiAutomator2 Driver 8.2.0 参数注册](https://github.com/appium/appium-uiautomator2-driver/blob/v8.2.0/lib/execute-method-map.ts)
+  与 [navigation 实现](https://github.com/appium/appium-uiautomator2-driver/blob/v8.2.0/lib/commands/navigation.ts)
+  接受 `url`、可选 `package` 和 `waitForLaunch`，命令返回 void；SDK 省略
+  `waitForLaunch`，保留该版本 Driver 的默认值 true，这不构成页面就绪断言。
+  [版本文档](https://github.com/appium/appium-uiautomator2-driver/blob/v8.2.0/README.md#mobile-deeplink)
+  说明 `package` 自 3.9.3 才可省略；旧版本拒绝省略目标时返回远端错误，不补全或重试。
+
+上游源码只作为协议依据，真实 Appium、Driver、设备与 Host 组合仍待兼容性验证，
+本能力不标记为 `Verified`。
+
 ## Session Background App（DP-110 已实现）
 
 `Session.BackgroundApp` 只请求把当前 App 放入后台，不接受 App ID 或定时时长，使用

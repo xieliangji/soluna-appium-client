@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：`DP-121`（已完成；下一项需显式选择）
-> 最后更新：2026-09-04
+> 当前计划项：暂无当前项（`DP-130` 已完成；下一项需显式选择）
+> 最后更新：2026-09-05
 
 ## Agent 执行约束
 
@@ -41,7 +41,7 @@
 | 19 | `DP-111` 屏幕方向 | `NAV-002` | Done | — |
 | 20 | `DP-120` 活动 App ID | `DEV-001` | Done | — |
 | 21 | `DP-121` 设备时间 | `DEV-002` | Done | — |
-| 22 | `DP-130` Deep Link | `NAV-003` | Queued | — |
+| 22 | `DP-130` Deep Link | `NAV-003` | Done | — |
 | 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Queued | — |
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
 | 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003` | Queued | DP-140 |
@@ -424,10 +424,18 @@ UiAutomator2 Driver 8.2.0 的源码观察只作为协议依据，真实 Driver�
 
 ### DP-130 Deep Link
 
-- 实现通用 Deep Link。
-- 按远端 AutomationName 映射 iOS `bundleId` 与 Android `package`。
-- 未知 Driver 本地拒绝。
-- 排除浏览器历史、通用 Back 和页面自动断言。
+- 实现根包 `Session.DeepLink(ctx, url, appID) error`，通过统一执行链发出一次
+  `mobile: deepLink`；按远端确认的精确 AutomationName 将非空 appID 映射为
+  XCUITest `bundleId` 或 UiAutomator2 `package`。空 appID 省略目标字段，交由远端
+  处理，不从 Capability 或前台应用补全；未知 Driver 本地拒绝。
+- 空 URL、非法 UTF-8、本地 Session/context 失败零远端请求；其余 URL 和目标
+  字符串原样发送。成功 value 严格为 `null`，统一 Error/Observer identity 为
+  `deep_link`；保持超时、资源上限、Delivery 和脱敏，不重试或 fallback。
+- 记录 XCUITest iOS 16.4+ / Xcode 14.3+ 条件和 UiAutomator2 3.9.3 起可省略
+  package 的差异；排除浏览器历史、通用 Back、Context 切换和页面自动断言。
+
+已完成实现和协议回归测试，NAV-003 更新为 `Implemented` / `Protocol`。
+真实 Driver、设备和 Host 组合仍未验证，不标记为 `Verified`。
 
 ## 第四阶段：兼容性与平台能力
 

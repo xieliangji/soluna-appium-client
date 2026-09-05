@@ -210,6 +210,28 @@ operation identity，并将 Appium common Device Time GET 命令的成功 value
   也无法仅从该响应识别；真机和 Android 的 Driver 取值差异同样
   不新增公共错误码。本能力不包含时间或时区设置。
 
+## Deep Link 错误（DP-130 已实现）
+
+`Session.DeepLink` 的两个 Driver 分支都使用固定 `deep_link` Error/Observer
+identity，并沿用根包错误、投递状态和诊断脱敏模型，不增加专用错误码：
+
+- nil、零值或仅供清理的 Session 返回 `CodeInvalidArgument`；已关闭 Session
+  返回 `CodeSessionLost`，均为 `DeliveryNotSent`。未知或非精确的
+  `automationName` 返回 `CodeUnsupported` / `DeliveryNotSent`，不探测远端。
+- 空 URL 或 URL/App ID 含非法 UTF-8 时返回 `CodeInvalidArgument` /
+  `DeliveryNotSent`。空 App ID 合法，表示省略平台目标字段；其他字符串由远端
+  校验，SDK 不规范化或猜测协议值。
+- 成功 value 非 JSON `null`、缺失 value 或 envelope 无效时返回
+  `CodeResponseInvalid` / `DeliveryAcknowledged`；命令响应超过统一上限时
+  返回 `CodeResponseTooLarge` / `DeliveryAcknowledged`。解码在 Observer Finished
+  前完成，事件与返回错误保持一致。
+- 远端不支持命令、URI/目标 App 无效、Session 丢失或执行失败沿用统一远端映射，
+  保留 StatusCode、RemoteCode 和 `DeliveryAcknowledged`。不因平台版本限制
+  改用其他路由、脚本、浏览器操作或 Host 工具。
+- nil context、发送前取消/截止、已尝试但无响应的传输失败沿用统一本地和传输
+  错误语义，Delivery 分别为 `DeliveryNotSent` 或 `DeliveryUnknown`。后者不重放，
+  不回滚，不推测远端应用或页面状态；成功响应同样不触发自动页面断言。
+
 ## Screenshot 与 Element Screenshot 响应及流式交付错误
 
 `Session.Screenshot`、`Session.ScreenshotTo`、`Element.Screenshot` 与

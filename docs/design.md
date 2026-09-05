@@ -888,6 +888,24 @@ Host 工具，也不提供时间或时区设置能力。
 协议设计输入，不是真实设备兼容性证据；真实 Appium、Driver、设备和
 Host 组合仍须写入 `docs/compatibility.md` 后才可称为 `Verified`。
 
+### 7.11 Deep Link（DP-130）
+
+NAV-003 在根包 `Session` 上提供统一入口：
+
+```go
+func (s *Session) DeepLink(ctx context.Context, url string, appID string) error
+```
+
+该入口通过统一执行链调用固定的 `mobile: deepLink` Execute Method。
+远端创建 Session 后确认的精确 `automationName` 决定目标字段：XCUITest 使用
+`bundleId`，UiAutomator2 使用 `package`；未知 Driver 本地拒绝。空 appID 省略
+目标字段，由远端处理，不从 Capability 或活动 App 快照猜测目标。
+
+Deep Link 只发起一次导航请求，不建立 Session 页面或应用状态，不增加平台
+Session wrapper、浏览器历史、通用 Back、自动页面断言、重试或 fallback。
+具体参数校验、成功值、投递语义和上游版本条件由
+`docs/command-semantics.md` 与 `docs/error-model.md` 的 DP-130 条目维护。
+
 ## 8. 坐标与视觉产物
 
 项目明确区分 Native WebDriver 几何、Web DOM/CSS 几何、Driver 像素几何和具体
