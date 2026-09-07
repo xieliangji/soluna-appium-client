@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-09-05
+> 最后更新：2026-09-07
 
 ## 1. 文档目的
 
@@ -125,6 +125,7 @@ SDK 不定义 `xcuitest.Client`、`uiautomator2.Client` 或独立公共 BiDi Cli
 | ELM-006 | `Element.Screenshot` | Element method | Implemented | W3C Element Screenshot | 不承诺自动滚动或与本地裁剪等价 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
 | ELM-007 | `Element.ScreenshotTo(io.Writer)` | Element method | Implemented | 流式 Base64 解码 | 使用 Screenshot 专用上限 | Protocol | `screenshot.go`, `element_screenshot_test.go` |
 | ELM-008 | `Displayed` / `Enabled` / `Selected` | Element method | Excluded | Driver 状态查询 | 不能满足当前确定性语义要求 | None | 如未来重新引入需单独评审 |
+| ELM-009 | `Element.BelongsTo(*Session)` | Element method | Implemented | 纯本地对象归属查询 | 创建时固定归属，变量重赋值不会重绑定旧 Element；共享关闭状态，隔离同名 Session；查询不读取关闭状态或发送请求 | Unit | `element.go`, `element_ownership.go`, `element_ownership_test.go`, `element_ownership_observer_test.go`, `docs/design.md` §2.2 / AD-035 |
 
 ### 5.3 视觉、页面与坐标
 
@@ -233,7 +234,7 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机设备类型和
 |---|---|---|---|---|---|---|---|
 | XCUI-001 | `IOSPressButton` | Platform function | Implemented | `mobile: pressButton` / WDA；通过固定路由的高级 Execute Script 链保留 `ios_press_button` identity | iOS；部分按键受设备和系统限制 | Protocol | `xcuitest/device.go`, `device_test.go` |
 | XCUI-002 | `IOSDeviceScreenInfo` | Platform function | Implemented | `mobile: deviceScreenInfo` / WDA；通过带 typed decoder 的统一 Execute Script 链保留 `ios_device_screen_info` identity | 报告 scale 与 status bar，不自动换算 | Protocol | `xcuitest/device.go`, `device_test.go` |
-| XCUI-003 | Picker Wheel 选择 | Platform function | Accepted | `mobile: selectPickerWheelValue` | iOS/XCUITest；通用 Actions 无稳定等价 | None | 优先平台候选 |
+| XCUI-003 | `IOSSelectPickerWheelValue` | Platform function | Implemented | `mobile: selectPickerWheelValue`；统一 Execute Script 执行链 | iOS/XCUITest；依赖 ELM-009 本地归属查询；有限 offset `(0,0.5]`；版本/Host 依据见 `docs/compatibility.md` | Protocol | `xcuitest/picker.go`, `xcuitest/picker_test.go`, `docs/command-semantics.md` |
 | XCUI-004 | 按 label 处理 Alert | Platform function | Accepted | XCUITest Alert extension | 依赖通用 Alert API 先完成 | None | 只暴露标准 Alert 无法表达的增量 |
 | XCUI-005 | Simulated Location | Platform function | Accepted | WDA simulated location | iOS 16.4+；iOS 17 主要 macOS | None | 单独定义 Set/Get/Reset |
 | XCUI-006 | System Monitor | Platform function / Session stream | Architecture | RemoteXPC DVT + BiDi | iOS 18+ 真机；跨 Host 候选 | None | 依赖 BIDI-001/002 |

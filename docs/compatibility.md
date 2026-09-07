@@ -6,7 +6,7 @@
 >
 > 协议基线：Appium 3.x
 >
-> 最后更新：2026-09-05
+> 最后更新：2026-09-07
 >
 > 当前实测记录：无；尚无 `Verified` 组合
 
@@ -134,6 +134,30 @@ iOS 18+ 各 OS 版本与三个 Host 必须独立登记；“18+”只定义通�
 本项目不支持 iOS Simulator。Simulator 不建立 Runtime Profile 或 Lane，也不能
 产生任何能力的 `Verified` 结果；能力矩阵中已排除的 Simulator-only API 仍不进入
 公共 SDK。
+
+### 4.1.1 Picker Wheel 协议依据（DP-150）
+
+XCUI-003 的以下记录仅是 2026-09-06 核对的固定上游源码依据，不是 Runtime
+Profile 或实机验证。项目结果为 `NotRun`，尚无具体组合的 `Verified` 记录。
+
+| 维度 | 已有依据与尚未确认的范围 |
+|---|---|
+| 设备 OS / 类型 | iOS 原生 `XCUIElementTypePickerWheel`，项目仅支持真机；主线仍为 iOS 17+，低于 17 按 Legacy Lane。未确定该命令自身的最低 iOS 版本，不能由主线范围推出全部版本支持 |
+| Driver / Appium | 协议源码基线 XCUITest Driver 12.1.0 / Appium 3；不是该命令首次可用版本或已验证最低版本。使用现代 `elementId` 字段，不支持旧 `element` 别名 |
+| WDA | 核对 WDA 15.1.6；Driver 12.1.0 的依赖声明为 `appium-webdriveragent ^15.1.6`。实际部署的 WDA 制品仍须在 Profile 单独确认；命令自身最低 WDA 版本未知 |
+| Appium Host | Driver 的系统要求以 macOS/Xcode 为主，Windows/Linux 支持有限；沿用现有各 Lane 的外部/预安装 WDA 和连接条件。该命令经 Driver/WDA 执行，SDK 不直接调用 Host 工具；尚无任何 Host 的本项目实测结果 |
+| offset / 副作用 | Driver 文档写 `[0.01, 0.5]`；WDA 15.1.6 实际校验 `(0, 0.5]`。SDK 接受后者，不证明小于 `0.01` 时可成功改变控件值；大 offset 可能跳过多项。WDA 内部一次点击后最多等待 2 秒观察值改变，SDK 不附加等待或目标值循环 |
+
+固定来源：
+
+- [XCUITest 12.1.0 Execute Method 注册](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/execute-method-map.ts)、
+  [gesture 实现](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/commands/gesture.ts)、
+  [参数文档](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/docs/reference/execute-methods.md)、
+  [依赖声明](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/package.json)与
+  [系统要求](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/docs/getting-started/system-requirements.md)。
+- [WDA 15.1.6 Picker Wheel handler](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Commands/FBElementCommands.m)、
+  [点击与内部等待](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Categories/XCUIElement+FBPickerWheel.m)与
+  [成功 value 编码](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Routing/FBResponsePayload.m)。
 
 ### 4.2 Android / UiAutomator2
 

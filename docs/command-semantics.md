@@ -466,6 +466,48 @@ operation 以及 Observer `Finished.ErrorCode`。这两个入口都不是任意 
 Raw Command API。普通调用方无需区分 identity 时继续使用 `ExecuteScript`；平台强
 类型 Execute Method 应使用带 decoder 的入口。
 
+## XCUITest Picker Wheel（DP-150）
+
+`xcuitest.IOSSelectPickerWheelValue(ctx, session, element, direction, offset)`
+使用 `PickerWheelDirection`（`PickerWheelNext` / `PickerWheelPrevious`）和
+`PickerWheelOffset`，发送固定的 Execute Method 请求：
+
+```text
+POST /session/{sessionId}/execute/sync
+script: "mobile: selectPickerWheelValue"
+args: [{"elementId":"<element ID>","order":"next|previous","offset":<number>}]
+```
+
+`Session.Find` / `FindElements` 在首个远端请求前固定本次查找使用的 Session
+值，使同步 Observer 回调重新赋值调用方变量后，候选、几何和构造身份仍一致。
+Element 创建时保存私有 Session 值副本，归属和后续命令均使用该副本；调用方
+重新赋值 Session 变量不会重绑定旧 Element。副本共享原 Session 的关闭状态，
+关闭其他 Session 不影响旧 Element，关闭原 Session 后其命令仍在本地拒绝。
+`Element` 必须通过 `Element.BelongsTo(session)` 归属于传入 Session；Session
+与 Element 的本地句柄无效、Driver 不是远端确认的精确 `XCUITest`、方向不是
+`next`/`previous` 或 offset 不是有限的 `(0, 0.5]` 数值时，返回
+`CodeInvalidArgument` 或 `CodeUnsupported` 与 `DeliveryNotSent`，不发送探测或
+候选请求。offset 零值无效，不使用 Driver 默认的 `0.2`。
+
+Error/Observer identity 固定为 `ios_select_picker_wheel_value`，不进入远端参数。
+请求带 `Content-Type: application/json`；Session ID 由统一 Endpoint 边界转义，
+elementId 作为 JSON 字符串原样编码。成功 value 必须严格为 JSON `null`，
+decoder 在统一执行链内、Observer Finished 前完成。响应格式错误、元素类型
+错误、stale、无效元素状态、Session 丢失及其他远端错误沿用统一 Execute
+Script 错误映射和 `DeliveryAcknowledged`；请求发出后、收到响应前取消或
+传输不确定时保持统一的
+`DeliveryUnknown`，不重放命令。SDK 不发送可选的 `value`/`maxAttempts`，不
+附加 Swipe、重试、目标值轮询或版本探测。XCUITest Driver 12.1.0 文档描述
+offset 为 `[0.01, 0.5]`，其依赖的 WDA 15.1.6 实际接受 `(0, 0.5]`；SDK
+采用 WDA 的数值边界，但小于 `0.01` 的组合兼容性不作保证。一次成功请求
+不保证恰好移动一个值；WDA 可能在内部等待观察值改变。
+
+offset 是点击距离相对于控件高度的比例；过小可能无法改变值，过大可能跳过
+多项。原生控件类型由 WDA 判断，SDK 不预读 Element 属性、Context、几何、
+Healthy 或 Discovery。普通命令超时、响应上限和远端错误脱敏继续适用。
+具体固定版本源码链接、最低版本未知项及 Host 条件见
+[兼容性 §4.1.1](compatibility.md#411-picker-wheel-协议依据dp-150)。
+
 ## Session Screenshot
 
 `Session.Screenshot` 和 `Session.ScreenshotTo` 使用同一条 W3C Screenshot

@@ -22,6 +22,23 @@
 - 成功响应 value 类型不符合命令契约时返回 `CodeResponseInvalid`，
   Delivery 为 `DeliveryAcknowledged`。
 
+## XCUITest Picker Wheel 错误（DP-150）
+
+`IOSSelectPickerWheelValue` 的 nil/未初始化参数、跨 Session Element、非法
+方向或 offset 在本地返回 `CodeInvalidArgument`/`DeliveryNotSent`；非
+`XCUITest` Driver 返回 `CodeUnsupported`/`DeliveryNotSent`。这些校验不发送
+远端请求。远端成功 value 非 JSON `null` 返回 `CodeResponseInvalid`，保留
+`DeliveryAcknowledged`；WDA 的 Picker Wheel 类型错误、stale、无效元素状态和
+其他命令失败沿用统一远端错误码映射。请求发出后取消、超时或传输不确定保持
+统一 Delivery 事实，不自动重试。
+
+固定 `Error.Operation` 和 Observer identity 为 `ios_select_picker_wheel_value`。
+响应 decoder 在统一链内执行，Observer Finished 的 ErrorCode、StatusCode 和
+Delivery 与调用方收到的错误一致。`Element.BelongsTo` 本身只返回 bool，
+不生成 Error/Delivery；关闭不改变归属关系，后续选择通过根包执行链返回
+`CodeSessionLost`/`DeliveryNotSent`。nil、已取消或已过期 context 的错误也由
+统一执行链处理，未发送时 Delivery 为 `DeliveryNotSent`。不新增专用错误码。
+
 ## Timeouts 响应错误
 
 `Session.Timeouts` 返回 `CurrentTimeouts`，并对 `command` 或 `implicit` 字段缺失、显式 `null`、负数、

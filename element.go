@@ -29,11 +29,21 @@ const (
 
 // Element 表示绑定到某个 Session 的远端 WebDriver 元素引用。
 //
-// Element 只保存远端元素 ID，不缓存 Locator、文本、属性或坐标。
+// Element 保存创建时的 Session 归属和远端元素 ID，不缓存 Locator、文本、属性或坐标。
 // 元素失效后客户端不会自动重新定位。
 type Element struct {
 	session *Session
 	id      string
+}
+
+// newElement 固定创建时的 Session 句柄，避免调用方复用变量后重绑定旧元素。
+// Session 值副本仍共享 state，因此关闭状态继续由原 Session 生命周期控制。
+func newElement(session *Session, id string) *Element {
+	owner := *session
+	return &Element{
+		session: &owner,
+		id:      id,
+	}
 }
 
 // Find 查找当前 Context viewport 中第一个匹配 Locator 的元素。
@@ -55,6 +65,10 @@ func (s *Session) Find(
 	if err := validateLocator(findElementOperation, locator); err != nil {
 		return nil, err
 	}
+
+	// 同步 Observer 可能复用调用方的变量；整次查找应使用同一个 Session 身份。
+	owner := *s
+	s = &owner
 
 	kind, err := s.contextKindForGeometry(ctx, findElementOperation)
 	if err != nil {
@@ -122,6 +136,10 @@ func (s *Session) FindElements(
 	if err := validateLocator(findElementsOperation, locator); err != nil {
 		return nil, err
 	}
+
+	// 在首个远端请求前固定身份，使后续候选、几何和 Element 构造保持一致。
+	owner := *s
+	s = &owner
 
 	kind, err := s.contextKindForGeometry(ctx, findElementsOperation)
 	if err != nil {
@@ -247,10 +265,7 @@ func (s *Session) findElementCandidates(
 	)
 
 	for index, elementID := range elementIDs {
-		elements[index] = &Element{
-			session: s,
-			id:      elementID,
-		}
+		elements[index] = newElement(s, elementID)
 	}
 
 	return elements, nil
@@ -510,10 +525,7 @@ func (e *Element) findElementCandidates(
 	)
 
 	for index, elementID := range elementIDs {
-		elements[index] = &Element{
-			session: session,
-			id:      elementID,
-		}
+		elements[index] = newElement(session, elementID)
 	}
 
 	return elements, nil

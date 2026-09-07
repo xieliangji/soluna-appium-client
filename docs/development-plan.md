@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-140` 已完成；下一项需显式选择）
-> 最后更新：2026-09-05
+> 当前计划项：暂无当前项（`DP-150` 已完成；下一项需显式选择）
+> 最后更新：2026-09-07
 
 ## Agent 执行约束
 
@@ -44,7 +44,7 @@
 | 22 | `DP-130` Deep Link | `NAV-003` | Done | — |
 | 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Done | — |
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
-| 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003` | Queued | DP-140 |
+| 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003`, `ELM-009` | Done | DP-140 |
 | 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Queued | DP-010, DP-140 |
 | 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Queued | DP-140 |
 | 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Queued | — |
@@ -470,6 +470,25 @@ Android 的真机待验证通道，明确排除 Simulator/Emulator。区分 SDK 
 - 实现强类型方向和 offset。
 - 校验 Session、Element 归属和 XCUITest Driver。
 - 不重复普通 Swipe。
+
+经本任务授权的同行评审，先接受 ELM-009 `Element.BelongsTo` 本地归属查询，
+以共享创建身份识别 Session 值复制并隔离同名 Session；设计 §2.2 / AD-035
+和编码规范记录这一窄边界调整。随后实现 `IOSSelectPickerWheelValue`、
+`PickerWheelDirection`、`PickerWheelOffset`，使用显式有限 `(0, 0.5]` offset、
+固定 Execute Method 与链内严格 null 解码，不附加探测、重试或 Swipe。
+
+请求、错误、协议依据及 Driver 文档与 WDA offset 范围差异已同步到领域文档。
+ELM-009 为 `Implemented` / `Unit`，XCUI-003 为 `Implemented` / `Protocol`；
+公共入口测试覆盖归属/复制/关闭、Driver/参数/context、本地零请求、请求体、
+响应/Observer、资源上限及取消后不重放。全量测试和 race 检查通过，真实设备和
+Host 组合仍未验证，不标记为 `Verified`，不启动 DP-151。
+
+完成后 P2 复审发现调用方复用 Session 值变量会重绑定旧 Element。已在统一
+Element 创建边界保存私有 Session 副本并保留共享关闭状态；Session 查找还在
+首个请求前固定身份，避免同步 Observer 重赋值使候选与几何请求使用不同 Session。
+新增公共入口回归覆盖四种 Find 入口、跨 Session Picker 本地拒绝、原 Session
+命令路由及关闭状态，并复验用户提供的原始复现测试；全量与 race 检查通过后
+重新确认本项 `Done`。
 
 ### DP-151 XCUITest Alert label
 

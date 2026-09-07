@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-09-04
+> 最后更新：2026-09-07
 
 ## 1. 文档职责
 
@@ -70,6 +70,20 @@ func ElementCapability(
 ```
 
 平台包不得为了方法调用风格而包装根包 Session。这样可以避免产生第二套状态、关闭语义、配置和错误模型。
+
+DP-150 同行边界评审接受根包 `Element.BelongsTo(session *Session) bool`
+（ELM-009），供调用方和元素级平台函数查询本地对象归属。nil、零值或未初始化
+的对象返回 false；有效 Element 与其 Session 的值副本仍有同一归属。
+根包使用创建 Session 时独有、值复制后共享的非 nil 内部身份（当前为
+`sessionState`），同时核对 Client 和 Session ID。不同 Client、不同 Endpoint
+或再次创建的 Session，即使远端 ID 相同也不能通过归属校验。
+
+归属关系不随 Close、远端 stale 或失效响应改变；该查询不读取可变关闭状态，
+不判断命令可执行性，不发请求或 Observer 事件。平台函数将不属于该 Session 的
+Element 映射为本地参数错误；Session 生命周期仍由根包统一执行链校验。
+不公开所属 Session、Client 或身份 token，不通过 Session ID 字符串、Session
+指针地址、远端探测、反射或全局注册表推断归属。本次只增加这一对象关系查询，
+不增加执行 hook 或平台 Session wrapper。
 
 ### 2.3 HTTP 与 BiDi
 
@@ -210,6 +224,35 @@ uiautomator2/driver.go
 ```
 
 现有 `xcuitest/client.go` 可在不改变行为的独立重构中重命名。
+
+### 5.4 Picker Wheel（DP-150 同行评审）
+
+XCUI-003 接受以下无状态函数及参数类型：
+
+```go
+type PickerWheelDirection string // PickerWheelNext="next", PickerWheelPrevious="previous"
+type PickerWheelOffset float64
+
+func IOSSelectPickerWheelValue(
+    ctx context.Context,
+    session *appium.Session,
+    element *appium.Element,
+    direction PickerWheelDirection,
+    offset PickerWheelOffset,
+) error
+```
+
+offset 按控件高度表示点击距中心的比例，必须显式提供有限 `(0, 0.5]` 数值，
+零值不代表默认值。范围依据 WDA 15.1.6 实际校验；XCUITest 12.1.0 文档写作
+`[0.01, 0.5]`，差异和副作用在命令语义中说明，不隐式规范化或补默认参数。
+Session 门禁复用 §5.1；元素归属使用 §2.2 的 ELM-009；元素是否为原生
+`XCUIElementTypePickerWheel` 及能否改变值由远端判断。
+
+仅发送 `elementId`、`order`、`offset`，通过已有
+`ExecuteScriptWithOperationAndDecode` 在统一执行链内严格解码 `null`。
+本次不引入新的根包执行入口、普通 Swipe 包装、目标值搜索、`value`/
+`maxAttempts`、自动重试或 Host 工具调用。归属边界评审由 AD-035 记录；
+固定请求、错误及环境依据分别见命令语义、错误模型与兼容性文档。
 
 ## 6. Capabilities、Settings 与 Runtime Discovery
 
@@ -1401,6 +1444,7 @@ internal/bidi       BiDi 协议实现
 | AD-032 | Accepted | Orientation 使用根包 Session 的 Appium 3 正式 Appium Device route（`/session/{sessionId}/appium/device/orientation`）和精确 `PORTRAIT` / `LANDSCAPE` 强类型；读取为无缓存快照，设置只接受有限枚举且成功 value 严格为 `null`；不回退 deprecated JSONWP route、不确认后续状态、不规范化值或公开空间 Rotation | 保留两 Driver 共有的二维方向事实，避免伪造横屏左右/倒置信息或把设置响应当成持久状态保证 |
 | AD-033 | Accepted | `Session.ActiveAppID` 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 保留为空字符串无焦点快照；未知 Driver 本地拒绝，不从 App/bundle/package Capability 猜测，不公开进程信息或执行 fallback | 在保持平台标识含义和 Driver 探测差异的同时提供统一只读入口，并避免初始启动配置被误当成动态前台状态 |
 | AD-034 | Accepted | `Session.DeviceTime` 使用 Appium common Device Time GET route 的固定默认格式，将精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` 解码为保留数字 UTC 偏移的秒精度 `time.Time`；不猜测其他格式或时区名、不按 Driver 本地门禁，不缓存、重试、回退 Host 时间或提供时间/时区设置 | 交付可校验的时间点与偏移事实，同时显式保留 XCUITest Simulator 可来自 Host 时钟、真机与 Android 取值路径不同的兼容性边界 |
+| AD-035 | Accepted | DP-150 接受 `Element.BelongsTo(*Session) bool` 本地归属查询（ELM-009）；共享创建身份允许值复制且隔离同名远端 Session；关闭状态与归属分离，不公开 owner/token 或执行 hook | 为调用方及元素级平台能力提供受控的对象关系边界；详见 §2.2 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 
