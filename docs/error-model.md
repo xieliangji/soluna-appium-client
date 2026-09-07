@@ -22,6 +22,28 @@
 - 成功响应 value 类型不符合命令契约时返回 `CodeResponseInvalid`，
   Delivery 为 `DeliveryAcknowledged`。
 
+## XCUITest Alert label 错误（DP-151）
+
+`IOSAcceptAlertWithLabel` / `IOSDismissAlertWithLabel` 对 nil、未初始化、仅供
+清理的 Session，以及空或非法 UTF-8 label 返回
+`CodeInvalidArgument` / `DeliveryNotSent`；远端确认的 Driver 不精确等于
+`XCUITest` 时返回 `CodeUnsupported` / `DeliveryNotSent`。本地错误文本不含
+label，所有本地拒绝均为零远端请求。已关闭 Session、nil/取消/过期 context
+沿用根包的错误与 Cause，其中关闭返回 `CodeSessionLost` / `DeliveryNotSent`。
+
+远端 `no such alert` 返回 `CodeAlertNotFound`；WDA 15.1.6 在 label 未匹配时
+返回 `invalid element state`，映射为 `CodeCommandFailed`，不
+改写为 Alert 不存在，也不回退到默认按钮。远端 `invalid argument` 仍映射为
+`CodeInvalidArgument`；其他错误沿用统一映射，收到远端响应为
+`DeliveryAcknowledged`。成功 value 非 JSON `null`、缺失或 envelope 非法时
+返回 `CodeResponseInvalid`。请求已发出后取消或超时保留统一 Delivery 事实，
+不重放命令。
+
+Error 与 Observer identity 分别固定为 `ios_accept_alert_with_label` 和
+`ios_dismiss_alert_with_label`，不使用 label 构造 identity。严格响应解码在
+统一命令链内执行，Observer Finished 的 ErrorCode、StatusCode 和 Delivery
+与调用方一致；现有远端错误脱敏和资源上限继续适用，不新增错误码。
+
 ## XCUITest Picker Wheel 错误（DP-150）
 
 `IOSSelectPickerWheelValue` 的 nil/未初始化参数、跨 Session Element、非法

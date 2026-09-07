@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-150` 已完成；下一项需显式选择）
+> 当前计划项：暂无当前项（`DP-151` 已完成；下一项需显式选择）
 > 最后更新：2026-09-07
 
 ## Agent 执行约束
@@ -45,7 +45,7 @@
 | 23 | `DP-140` 兼容性矩阵结构 | `INF-008` | Done | — |
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
 | 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003`, `ELM-009` | Done | DP-140 |
-| 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Queued | DP-010, DP-140 |
+| 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Done | DP-010, DP-140 |
 | 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Queued | DP-140 |
 | 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Queued | — |
 | 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Queued | DP-160 |
@@ -495,6 +495,20 @@ Element 创建边界保存私有 Session 副本并保留共享关闭状态；Ses
 - 只实现标准 Alert 无法表达的 label 增量。
 - 空 label 本地拒绝；Driver mismatch 零远端请求。
 - 不重复根包 Accept/Dismiss。
+
+已实现 `IOSAcceptAlertWithLabel` / `IOSDismissAlertWithLabel`，强制非空且有效
+UTF-8 label，其余内容原样发送；复用远端确认的精确 XCUITest 门禁和统一
+Execute Script 链，以固定 `mobile: alert`、action、`buttonLabel` 发起一次
+请求，链内严格解码 `null`。无 label 操作继续使用根包 API，不增加按钮列表、
+探测、等待、重试或默认按钮 fallback。
+
+公共入口协议测试覆盖两个 action、label 保真、Driver/Session/context 本地
+零请求、关闭共享状态、错误/Observer 一致性、响应上限和取消后不重放。
+WDA 的标签未匹配使用 `invalid element state` / `CodeCommandFailed`；没有
+Alert 使用 `no such alert` / `CodeAlertNotFound`。命令、错误和固定上游版本 /
+Host 依据已同步到领域文档，XCUI-004 为 `Implemented` / `Protocol`。
+`gofmt`、全量 `go test ./...` 和 `go test -race ./...` 已通过；尚未执行真机或
+Host 组合验证，不标记为 `Verified`，不启动 DP-152。
 
 ### DP-152 XCUITest Simulated Location
 

@@ -159,6 +159,29 @@ Profile 或实机验证。项目结果为 `NotRun`，尚无具体组合的 `Veri
   [点击与内部等待](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Categories/XCUIElement+FBPickerWheel.m)与
   [成功 value 编码](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Routing/FBResponsePayload.m)。
 
+### 4.1.2 Alert label 协议依据（DP-151）
+
+XCUI-004 的以下记录是 2026-09-07 核对的固定上游源码依据，不是 Runtime
+Profile 或实机验证。项目结果为 `NotRun`，尚无具体组合的 `Verified` 记录。
+
+| 维度 | 已有依据与尚未确认的范围 |
+|---|---|
+| 设备 OS / 类型 | iOS 原生 Alert，项目仅支持真机；主线仍为 iOS 17+，低于 17 按 Legacy Lane。未确定该命令自身的最低 iOS 版本，不能由主线范围推出全部版本支持 |
+| Driver / Appium | 协议源码基线 XCUITest Driver 12.1.0 / Appium 3；注册 `mobile: alert` 的必填 `action` 与可选 `buttonLabel`。SDK 只发送 `accept` / `dismiss` 且强制非空 label；本次核对版本不是命令首次可用版本或已验证最低版本 |
+| WDA | 核对 WDA 15.1.6，Driver 12.1.0 依赖声明为 `appium-webdriveragent ^15.1.6`。Driver 把 `buttonLabel` 传成 WDA `/alert/accept` 或 `/alert/dismiss` 的 `name`；最低 WDA 版本未知，实际制品须在 Profile 单独确认 |
+| label / 副作用 | WDA 的两个 handler 在提供 `name` 时均调用按钮选择与点击逻辑，故 action 不保证按钮对应应用的肯定/取消操作。按钮未匹配返回 `invalid element state`，没有 Alert 返回 `no such alert`；匹配及副作用边界见命令语义，其他点击失败沿用远端错误映射 |
+| Appium Host | Driver 系统要求以 macOS/Xcode 为主，Windows/Linux 支持有限；沿用各 Lane 的预安装/外部 WDA 和连接条件。SDK 只经 Appium HTTP/Driver/WDA 执行，不直接调用 Host 工具；所有 Host 组合均无本项目实测结果 |
+
+固定来源：
+
+- [XCUITest 12.1.0 Execute Method 注册](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/execute-method-map.ts)、
+  [Alert 参数映射与实现](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/commands/alert.ts)、
+  [依赖声明](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/package.json)与
+  [系统要求](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/docs/getting-started/system-requirements.md)。
+- [WDA 15.1.6 Alert handler](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Commands/FBAlertViewCommands.m)、
+  [按钮 label 匹配与点击](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/FBAlert.m)与
+  [成功 value 编码](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Routing/FBResponsePayload.m)。
+
 ### 4.2 Android / UiAutomator2
 
 | Lane ID | 设备范围 | Appium Host | 连接与启动条件 | 项目结果 |

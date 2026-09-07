@@ -27,6 +27,45 @@
 远端 `no such alert` 是已确认收到响应的命令失败，Delivery 为
 `DeliveryAcknowledged`，并映射为 `CodeAlertNotFound`。
 
+## XCUITest Alert label（DP-151）
+
+XCUI-004 只增加标准 Alert 无法表达的按钮 label 选择，入口为：
+
+| API | `action` | Error / Observer identity |
+|---|---|---|
+| `xcuitest.IOSAcceptAlertWithLabel(ctx, session, label)` | `accept` | `ios_accept_alert_with_label` |
+| `xcuitest.IOSDismissAlertWithLabel(ctx, session, label)` | `dismiss` | `ios_dismiss_alert_with_label` |
+
+两个入口均经根包统一 Execute Script 链发送一次固定请求：
+
+```text
+POST /session/{sessionId}/execute/sync
+{"script":"mobile: alert","args":[{"action":"accept|dismiss","buttonLabel":"<label>"}]}
+```
+
+请求带 `Content-Type: application/json`，Session ID 由统一 Endpoint 边界转义。
+label 必须非空且为有效 UTF-8；空白字符串、大小写、Unicode 和其他合法字符
+原样编码，不 trim、不补默认值或规范化。Session 必须可用，Driver 只接受远端
+创建 Session 后确认的精确 `XCUITest`。这些本地校验失败不发送远端请求。
+Session 关闭、nil/取消/过期 context 继续由根包执行链处理。
+
+成功 value 必须严格为 JSON `null`；decoder 在统一执行链内、Observer Finished
+之前完成，响应上限、命令超时和错误脱敏继续适用。`no such alert` 映射为
+`CodeAlertNotFound`；其他远端错误保留统一映射。收到响应时 Delivery 为
+`DeliveryAcknowledged`；发送后、收到响应前取消或传输不确定时保留统一
+`DeliveryUnknown`，不自动重放副作用命令。
+
+按钮选择与点击由 Driver/WDA 执行。核对的 WDA 15.1.6 使用 `label ==` 精确
+匹配 Alert 后代按钮，并点击查询结果中的第一个匹配项；SDK 不额外检查 label
+是否唯一。accept/dismiss action 不保证所选按钮在应用中的肯定/取消含义，
+也不保证点击后的业务页面状态。SDK 不预读文本、按钮
+列表、Context、Healthy 或 Discovery，不附加等待、重试或默认按钮 fallback。
+不指定 label 的操作使用根包 `Session.AcceptAlert` / `DismissAlert`；本能力
+不增加无 label 的平台包装或按钮列表 API。
+
+固定上游源码、版本及 Host 条件见
+[兼容性 §4.1.2](compatibility.md#412-alert-label-协议依据dp-151)。
+
 ## Session Timeouts
 
 `Session.Timeouts` 每次读取 Appium 3 Get Timeouts 命令，并返回独立的
