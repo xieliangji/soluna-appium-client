@@ -66,6 +66,33 @@ Session 关闭、nil/取消/过期 context 继续由根包执行链处理。
 固定上游源码、版本及 Host 条件见
 [兼容性 §4.1.2](compatibility.md#412-alert-label-协议依据dp-151)。
 
+## XCUITest Simulated Location（DP-152）
+
+XCUI-005 提供三个无状态平台函数和一个稳定的位置类型：
+
+| API | Execute Method | Error / Observer identity | 成功 value |
+|---|---|---|---|
+| `xcuitest.IOSGetSimulatedLocation(ctx, session)` | `mobile: getSimulatedLocation` | `ios_get_simulated_location` | object 或未设置时 `nil` |
+| `xcuitest.IOSSetSimulatedLocation(ctx, session, location)` | `mobile: setSimulatedLocation` | `ios_set_simulated_location` | `null` |
+| `xcuitest.IOSResetSimulatedLocation(ctx, session)` | `mobile: resetSimulatedLocation` | `ios_reset_simulated_location` | `null` |
+
+三个函数都通过统一 Execute Script 链发送一次。`SimulatedLocation` 只包含以度
+为单位的 `Latitude` 和 `Longitude`。Set 在本地拒绝 NaN、无穷大以及超出纬度
+`[-90, 90]`、经度 `[-180, 180]` 的值；边界值和 `(0,0)` 原样发送。Get 的
+成功对象要求精确的 `latitude`、`longitude` 字段，两者必须同时为有限范围内的
+number 或同时为 `null`；后者返回 `nil, nil`，表示尚未设置或已重置。未知字段
+和 WDA 的 `altitude` 被忽略，不从真实设备定位补全结果。
+
+Set/Reset 成功 value 必须严格为 JSON `null`。所有响应 decoder 都在统一命令链
+内、Observer Finished 之前执行；响应上限、超时、错误脱敏和 Delivery 规则继续
+适用。未确认投递的取消或传输失败不重放。Session 必须是远端确认的精确
+`XCUITest`，本地门禁失败不发送请求；Session.Close 不自动 Reset。模拟位置
+可能持续到设备重启，调用方应在测试结束时显式 Reset。
+
+上游 XCUITest Driver 4.18+、Xcode 14.3+、iOS 16.4+ 才提供该能力；设备、
+Driver/WDA 和 Appium Host 的适用范围见
+[兼容性 §4.1.3](compatibility.md#413-simulated-location-协议依据dp-152)。
+
 ## Session Timeouts
 
 `Session.Timeouts` 每次读取 Appium 3 Get Timeouts 命令，并返回独立的

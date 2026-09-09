@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-151` 已完成；下一项需显式选择）
-> 最后更新：2026-09-07
+> 当前计划项：暂无当前项（`DP-152` 已完成；下一项需显式选择）
+> 最后更新：2026-09-09
 
 ## Agent 执行约束
 
@@ -46,7 +46,7 @@
 | 24 | `DP-141` 跨 Host Smoke | `INF-008` | Blocked | DP-140 + 实际环境 |
 | 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003`, `ELM-009` | Done | DP-140 |
 | 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Done | DP-010, DP-140 |
-| 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Queued | DP-140 |
+| 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Done | DP-140 |
 | 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Queued | — |
 | 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Queued | DP-160 |
 | 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Queued | DP-140 |
@@ -508,13 +508,25 @@ WDA 的标签未匹配使用 `invalid element state` / `CodeCommandFailed`；没
 Alert 使用 `no such alert` / `CodeAlertNotFound`。命令、错误和固定上游版本 /
 Host 依据已同步到领域文档，XCUI-004 为 `Implemented` / `Protocol`。
 `gofmt`、全量 `go test ./...` 和 `go test -race ./...` 已通过；尚未执行真机或
-Host 组合验证，不标记为 `Verified`，不启动 DP-152。
+Host 组合验证，不标记为 `Verified`。
 
 ### DP-152 XCUITest Simulated Location
 
 - 实现 Get/Set/Reset 和稳定位置类型。
 - 校验数值范围，明确 iOS、Driver/WDA 和 Host 条件。
 - 不合并旧混合 GeoLocation API。
+
+已实现 `IOSGetSimulatedLocation`、`IOSSetSimulatedLocation`、
+`IOSResetSimulatedLocation` 和 `SimulatedLocation`，统一复用根包 Execute
+Script 链。Get 将 WDA 未设置时的双 `null` 映射为 nil；Set 校验有限纬度
+`[-90,90]`、经度 `[-180,180]`，保留零值和边界值；Set/Reset 严格要求
+成功 value 为 `null`。本地门禁、响应 decoder、错误/Observer identity、
+Delivery、响应上限和取消后不重放均有协议回归覆盖。
+
+已核对 XCUITest Driver 4.18+、Xcode 14.3+、iOS 16.4+ 和 WDA
+`/wda/simulatedLocation` 的协议依据，并记录真机与 Appium Host 条件；SDK 不
+直接调用 Host 工具，不合并旧的混合 GeoLocation API。XCUI-005 更新为
+`Implemented` / `Protocol`；尚无真实设备或 Host 组合验证，不标记为 `Verified`。
 
 ### DP-160 UiAutomator2 Driver 门禁
 

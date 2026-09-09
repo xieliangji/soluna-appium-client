@@ -6,7 +6,7 @@
 >
 > 协议基线：Appium 3.x
 >
-> 最后更新：2026-09-07
+> 最后更新：2026-09-09
 >
 > 当前实测记录：无；尚无 `Verified` 组合
 
@@ -181,6 +181,29 @@ Profile 或实机验证。项目结果为 `NotRun`，尚无具体组合的 `Veri
 - [WDA 15.1.6 Alert handler](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Commands/FBAlertViewCommands.m)、
   [按钮 label 匹配与点击](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/FBAlert.m)与
   [成功 value 编码](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Routing/FBResponsePayload.m)。
+
+### 4.1.3 Simulated Location 协议依据（DP-152）
+
+XCUI-005 的以下记录是 2026-09-09 查阅的固定上游源码依据，不是 Runtime Profile
+或实机验证。
+项目结果仍为 `NotRun`，尚无具体组合的 `Verified` 记录。
+
+| 维度 | 已有依据与尚未确认的范围 |
+|---|---|
+| 设备 OS / 类型 | XCUITest Driver 文档要求 Xcode 14.3+、iOS 16.4+；项目仅支持 iOS 真机，主线为 iOS 17+，低于 17 按 Legacy Lane。Simulator 不在项目支持范围；该能力在 iOS 17+ 真机上是推荐路径 |
+| Driver / Appium | XCUITest Driver 4.18+ 注册 `mobile: getSimulatedLocation`、`mobile: setSimulatedLocation`、`mobile: resetSimulatedLocation`；Appium 3 协议基线。版本条件是上游文档下限，不是本项目实测最低组合 |
+| WDA | WDA 15.1.6 提供 `/wda/simulatedLocation` 的 GET/POST/DELETE。GET 未设置时返回 `latitude`、`longitude`、`altitude` 的 `null`；POST 需要经纬度并返回 `null`；DELETE 清除模拟位置。实际 WDA 制品和 XCTest API 支持仍须在 Profile 单独确认 |
+| 数值 / 副作用 | SDK 在本地校验有限纬度 `[-90,90]` 和经度 `[-180,180]`；WDA/CLLocation 的其余错误由远端返回。模拟位置可能持续到设备重启，调用方需要显式 reset；SDK 不在 Session.Close 或成功后自动清除 |
+| Appium Host | XCUITest Driver 以 macOS/Xcode 为主要路径；Windows/Linux 仅 iOS 18+ 真机、RemoteXPC 和预安装/外部 WDA 条件下纳入候选 Lane。SDK 只经 Appium HTTP/Driver/WDA 执行，不调用 `xcodebuild`、`simctl` 或其他 Host 工具；所有 Host 组合均无本项目实测结果 |
+
+固定来源：
+
+- [XCUITest 12.1.0 Execute Method 注册](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/execute-method-map.ts)、
+  [geolocation 实现](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/lib/commands/geolocation.ts)、
+  [Execute Method 文档](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/docs/reference/execute-methods.md)与
+  [系统要求](https://github.com/appium/appium-xcuitest-driver/blob/v12.1.0/docs/getting-started/system-requirements.md)。
+- [WDA 15.1.6 simulated location handler](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Commands/FBCustomCommands.m)与
+  [XCTest device helper](https://github.com/appium/WebDriverAgent/blob/v15.1.6/WebDriverAgentLib/Categories/XCUIDevice%2BFBHelpers.m)。
 
 ### 4.2 Android / UiAutomator2
 

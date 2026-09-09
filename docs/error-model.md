@@ -44,6 +44,27 @@ Error 与 Observer identity 分别固定为 `ios_accept_alert_with_label` 和
 统一命令链内执行，Observer Finished 的 ErrorCode、StatusCode 和 Delivery
 与调用方一致；现有远端错误脱敏和资源上限继续适用，不新增错误码。
 
+## XCUITest Simulated Location 错误（DP-152）
+
+`IOSSetSimulatedLocation` 对超出纬度 `[-90, 90]`、经度 `[-180, 180]` 的值以及
+NaN/无穷大返回 `CodeInvalidArgument` / `DeliveryNotSent`；nil、未初始化或
+仅供清理的 Session，以及非精确 `XCUITest` Driver 分别沿用平台门禁的
+`CodeInvalidArgument` 或 `CodeUnsupported`，均不发送请求。`SimulatedLocation`
+的零值 `(0,0)` 是合法坐标。
+
+Get 成功 value 必须是含精确 `latitude`、`longitude` 字段的 object；两者同时为
+有限范围内的 number 时返回位置，同时为 JSON `null` 时返回 nil 快照，单独 null、
+缺失、错误类型、越界或非有限 JSON number 都返回 `CodeResponseInvalid` /
+`DeliveryAcknowledged`，不返回部分位置。Set/Reset 成功 value 非 JSON `null`、
+缺失或 envelope 非法也返回 `CodeResponseInvalid` / `DeliveryAcknowledged`。
+
+固定 identity 为 `ios_get_simulated_location`、`ios_set_simulated_location` 和
+`ios_reset_simulated_location`；decoder 在统一链内完成，Observer Finished 与
+调用方 Error 的 Code、StatusCode、Delivery 保持一致。远端 `unknown command`、
+`invalid argument`、`invalid session id` 和其他失败沿用统一映射；请求发出后
+取消或传输不确定保持 Delivery 事实，不自动重试。Session.Close 不隐式发送
+Reset。
+
 ## XCUITest Picker Wheel 错误（DP-150）
 
 `IOSSelectPickerWheelValue` 的 nil/未初始化参数、跨 Session Element、非法
