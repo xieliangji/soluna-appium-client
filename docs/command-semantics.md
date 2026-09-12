@@ -11,8 +11,9 @@ BIDI-001/002 的所有权、API、资源默认值和并发关闭流程以
 ### 建立与请求
 
 调用方在 CreateSession 请求中显式提供 `webSocketUrl: true`；HTTP 创建不自动
-连接。`Session.Subscribe(ctx, events)` 只使用已保存的远端返回 URL，经根包
-管理的 WebSocket 握手进入同一个 Session。不发送 BiDi `session.new`、
+连接。`Session.Subscribe(ctx, subscription)` 接收 `BiDiSubscription{Events, Contexts}`，
+只使用已保存的远端返回 URL，经根包管理的 WebSocket 握手进入同一个 Session。
+不发送 BiDi `session.new`、
 `session.end`、status 探测或 Runtime Discovery。
 
 每条命令是一个 UTF-8 WebSocket text message，不使用 HTTP W3C `value`
@@ -20,19 +21,40 @@ envelope，不携带第二份 Session ID：
 
 | 操作 | `method` | `params` | 成功 `result` | Error/Observer operation |
 |---|---|---|---|---|
-| Subscribe | `session.subscribe` | `{"events":["example.sample"]}` | object；基线为 `{}` | `bidi_subscribe` |
-| 流关闭或有界清理 | `session.unsubscribe` | 原订阅的同一 events 数组 | object；基线为 `{}` | `bidi_unsubscribe` |
+| Subscribe | `session.subscribe` | `{"events":["example.sample"]}`；显式指定时增加 `contexts` 数组 | object；基线为 `{}` | `bidi_subscribe` |
+| 流关闭或有界清理 | `session.unsubscribe` | 保存的原订阅 events 与 contexts，保持数组值、顺序及 contexts 省略状态 | object；基线为 `{}` | `bidi_unsubscribe` |
 
-外层固定为 `{"id":1,"method":"session.subscribe","params":{"events":["example.sample"]}}`。
+省略 contexts 时的完整请求为
+`{"id":1,"method":"session.subscribe","params":{"events":["example.sample"]}}`。
 `example.sample` 仅为合成协议示例，不声明 Driver 支持该事件。ID 由连接分配，
-不接受调用方指定。events 的内容与顺序原样发送，不发 contexts；Appium 基线
-默认 contexts 为 `[""]`，仅表达其默认事件作用域，不能解释为浏览器全部上下文。
+不接受调用方指定。events 与显式 contexts 的内容、顺序原样发送：
+
+- `Contexts == nil`：省略 contexts，Appium 使用 `[""]`，仅匹配空 context；
+- `Contexts != nil`：必须是非空集合，显式发送原值；例如 `["NATIVE_APP"]`
+  仅匹配该名称，`[""]` 显式选择空 context，`["NATIVE_APP","WEBVIEW_example"]`
+  同时选择这两个精确名称。空字符串是合法值，不能解释为所有上下文的通配符；
+- 非 nil 空 slice、重复 context（含空字符串）或非法 UTF-8 为本地参数错误，
+  不发送 `[]`/`null` 或把它们退化为省略。不 trim、折叠大小写或根据 Driver/
+  当前 Context 填入默认值；SDK 不自动查询或切换 Context。
+
+例如显式 Native 订阅发送：
+
+```json
+{"id":1,"method":"session.subscribe","params":{"events":["example.sample"],"contexts":["NATIVE_APP"]}}
+```
+
+之后取消的 params 必须同为
+`{"events":["example.sample"],"contexts":["NATIVE_APP"]}`；不能省略 contexts
+使 Appium 只移除 `""` 而留下原订阅。两个数组在订阅时复制保存，所有关闭与
+有界清理使用该快照，原输入 slice 的后续修改不影响它。
 SDK 不发 `subscriptions` token 数组，不根据返回字段改变取消协议。
 
 订阅名称集合在本地必须非空、无重复，并与本 Session 其他准备/活动/取消中的
-流互不相交；每项为有效 UTF-8 且点两侧非空的完整 `module.event`。其他命名
-语义交给远端，不维护事件白名单。参数/上限/已关闭状态的本地拒绝不发握手或
-命令；首次拨号成功才发送 subscribe。请求和控制响应均受独立 BiDi 消息上限。
+流互不相交，即使它们的 contexts 不同；每项为有效 UTF-8 且点两侧非空的完整
+`module.event`。其他命名语义交给远端，不维护事件白名单。
+参数/上限/已关闭状态的本地拒绝不发握手或
+命令；首次拨号成功才发送 subscribe。请求和控制响应均受独立 BiDi 消息上限，
+请求预算包含 events 与 contexts 的合计编码大小，取消也必须能在上限内编码。
 
 ### 响应与事件解码
 
@@ -57,14 +79,17 @@ surrogate、尾随 JSON 值及重复顶层键。已知字段区分缺失、null 
   RawMessage；不抽取其中的 context、时间戳、级别或其他领域字段。
 
 唯一 reader 按完整消息顺序验证与分发。响应按 id 关联，事件按精确 method
-路由；不从 payload 推断订阅 ID。ACK 前匹配事件计入该流 staging、队列和
+路由；contexts 由 Appium 精确筛选，SDK 保留收到的顶层 context，不从 payload
+推断订阅 ID 或 context。ACK 前匹配事件计入该流 staging、队列和
 累计上限，成功确认后才可交付。无匹配流或处于取消阶段的合法事件不交付，
 但仍受单消息上限和 envelope 校验；非法事件影响整个连接。
 
 ### 副作用、取消与交付
 
-subscribe 成功只表示远端接受订阅，不保证能力产生事件、第一帧时间或未来连续
-交付。unsubscribe 成功只表示接受取消，不证明设备日志/监控采集本身已停止；
+subscribe 成功只表示远端接受指定 events/contexts 的订阅；context 不匹配时
+可以一直没有事件，SDK 不扩大订阅范围或自动补订阅。成功不保证能力产生事件、
+第一帧时间或未来连续交付。unsubscribe 成功只表示接受取消，不证明设备日志/
+监控采集本身已停止；
 typed monitor 的启动/停止属于后续独立能力。SDK 不自动启动或停止采集。
 
 每个事件最多向所属流的一个消费者交付一次；没有持久化、重放、去重或 exactly-once

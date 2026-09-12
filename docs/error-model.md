@@ -10,7 +10,7 @@ BIDI-001/002 沿用根包 `Error`，不公开 WebSocket 库错误类型。以下
 
 | 失败事实 | Code | 影响 |
 |---|---|---|
-| nil/零值对象、nil ctx、非法 events、名称重叠、并发第二个 Next | `CodeInvalidArgument` | 本地拒绝本次调用 |
+| nil/零值对象、nil ctx、非法 events/contexts、事件名重叠（即使 contexts 不同）、并发第二个 Next | `CodeInvalidArgument` | 本地拒绝本次调用 |
 | BiDiLimits 负数、溢出或无法安全表示 | `CodeInvalidConfig` | Client 配置拒绝 |
 | 远端 webSocketUrl 缺失或 false | `CodeUnsupported` | 不拨号，不影响 HTTP Session |
 | 已存在的 webSocketUrl 非法 | `CodeResponseInvalid` | 在 Subscribe 本地拒绝，不影响已创建的 HTTP Session |
@@ -25,9 +25,15 @@ BIDI-001/002 沿用根包 `Error`，不公开 WebSocket 库错误类型。以下
 
 固定 operations 为 `bidi_connect`、`bidi_subscribe`、`bidi_unsubscribe` 和
 `bidi_next`。流最终错误使用 `bidi_next`；它的 Cause 可保留导致失败的有界
-命令/清理错误。配额和溢出错误使用静态资源类别描述，不嵌入 events、URL、
+命令/清理错误。配额和溢出错误使用静态资源类别描述，不嵌入 events、contexts、URL、
 params 或原始消息。正常流 Close 后 `Err()==nil`，Next 返回 `io.EOF`；远端
 自行关闭正在使用的连接不映射成正常 EOF。
+
+Contexts 为 nil 合法且省略 wire 字段；非 nil 空集合、重复项或非法 UTF-8 返回
+`CodeInvalidArgument` / `DeliveryNotSent`，零握手、零控制命令。单个 `""` 合法，
+未知 context 不做本地支持性判断；ACK 成功但没有匹配事件不生成错误、不扩大
+订阅范围，Next 仍按自己的 ctx 等待。Events/Contexts 合计编码超过消息预算
+沿用 `CodeStreamLimitReached` / `DeliveryNotSent`，不新增 context 专用错误码。
 
 BiDi command 的 Delivery 按该命令自身事实计算：
 

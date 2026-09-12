@@ -1236,14 +1236,19 @@ Observer 回调是同步调用：`OnCommandStarted` 在传输开始前执行，
   与 [webSocketUrl 返回逻辑](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/appium/lib/appium.js)。
 
 该版本按事件名保存 Driver 级订阅，subscribe 会覆盖该事件的 contexts；默认
-contexts 为 `[""]`，不是浏览器所有 browsing context 的通配符。取消使用
-`events`，subscribe/unsubscribe 的成功 result 为 `{}`。事件没有 command ID，
+contexts 为 `[""]`，事件转发按 `eventSubs.includes(context)` 精确匹配，不是
+所有 context 的通配符。取消使用 `events` 与对应的 `contexts`，
+subscribe/unsubscribe 的成功 result 为 `{}`。事件没有 command ID，
 也没有可供 SDK 路由的 subscription ID。SDK 不假定存在现代浏览器 BiDi 的
 subscription token，不通过失败后切换参数形态兼容其他协议。
 
-首版只订阅完整事件名，省略 contexts，接收该 Appium 默认作用域的数据；不提供
-module 通配订阅、browsing-context/user-context 过滤或浏览器代理模式支持承诺。
-未来扩大协议范围必须另作设计。这里记录的是上游源码观察，不是设备/Host 验证。
+首版订阅完整事件名，并允许显式提供 Appium context 名称。省略 contexts 只能
+接收空 context 的事件；需要 `NATIVE_APP` 或某个 Web Context 的事件必须显式
+指定对应名称，SDK 不根据事件名、Driver 或当前 Context 猜测它们。不提供
+module/context 通配订阅、现代浏览器 user-context 过滤或浏览器代理模式支持承诺。
+Streaming Logs 的 Native/动态 Web Context 选择策略留给 DP-172，平台监控的
+明确 context 参数留给 DP-173/174；核心不自动发现或更新订阅范围。
+这里记录的是上游源码观察，不是设备/Host 验证。
 
 #### 10.4.2 Endpoint 与所有权
 
@@ -1285,7 +1290,15 @@ Driver 级订阅误当成已清除；关闭 socket 不等于远端取消订阅�
 连接，不形成新的公共 Client/Session 层级：
 
 ```go
-func (s *Session) Subscribe(ctx context.Context, events []string) (*EventStream, error)
+type BiDiSubscription struct {
+    Events   []string
+    Contexts []string // nil 省略；非 nil 必须非空，"" 是合法 context
+}
+
+func (s *Session) Subscribe(
+    ctx context.Context,
+    subscription BiDiSubscription,
+) (*EventStream, error)
 
 type BiDiEvent struct {
     Method  string
@@ -1300,14 +1313,28 @@ func (s *EventStream) Done() <-chan struct{}
 func (s *EventStream) Err() error
 ```
 
-`events` 必须非空，元素为有效 UTF-8、非空的完整 `module.event` 名称，点的两侧
+`Events` 必须非空，元素为有效 UTF-8、非空的完整 `module.event` 名称，点的两侧
 均非空；不 trim、改大小写、添加前缀、展开 module 或查询支持目录。不接受重复
-名称，不按 Driver 建立事件枚举。输入复制后才保留，保留调用方的发送顺序。
+名称，不按 Driver 建立事件枚举。
+
+`Contexts == nil` 表示省略 wire 字段，由 Appium 使用默认 `[""]`；不在本地
+改写为显式数组。非 nil 时集合必须非空，每项必须为有效 UTF-8 字符串且无
+精确重复，按原值和顺序发送；`""` 合法，表示 Appium 空 context 事件作用域，
+不是 wildcard。非 nil 空 slice 是参数错误，不能因 `omitempty` 被当作省略。
+`NATIVE_APP`、Web Context 或其他名称均不做枚举、trim、大小写转换或存在性
+探测，不隐式调用 Contexts/CurrentContext/SwitchContext 或 Runtime Discovery。
+
+通过本地校验与资源准入后，分别复制 Events、Contexts，并保留 Contexts 的
+nil/显式数组差异及两个数组的顺序。显式 Close、寿命取消、溢出清理等所有
+unsubscribe 都使用这份保存的原始订阅；调用方后续修改输入 slice 不得改变
+请求或清理范围，也不能用当前 Context 替换最初的参数。
 nil/零值 Session 或流上的错误方法返回本地参数错误；零值流的 `Done` 返回已经
 关闭的 channel，`Err` 返回参数错误，不能返回永久阻塞的 channel。
 
 同一 Session 可有多个流，但它们的事件名集合必须互不相交；包含任一已经处于
 准备、活动或取消阶段的事件名时，整个新订阅在本地拒绝，不发送部分请求。
+即使 Contexts 不同或集合互不相交，也不能允许相同事件名属于两个流；
+Appium 的 key 仍是事件名，第二次 subscribe 会覆盖第一次的 contexts。
 这是 Appium 按事件名覆盖订阅的边界，不实现引用计数、共享远端订阅或隐式广播。
 调用方也不能同时用其他客户端修改该远端 Session 的 BiDi 订阅；SDK 无法探测
 这类外部竞争。不同事件名的流可以独立订阅和取消。
@@ -1336,8 +1363,9 @@ SDK 待消费队列。顺序是本连接中该流的接收顺序，不承诺不�
 按 ID 完成 pending 项，响应可以乱序。控制响应直接交给各自有界完成槽，不能
 排到事件消费者队列中；锁内不得执行网络 I/O、解码领域数据或 Observer 回调。
 
-准备订阅时先保留名称、流配额和 staging 队列，再发送 subscribe。ACK 前到达的
-匹配事件只暂存，使用与活动队列相同的上限和累计计数；ACK 校验成功后按原顺序
+准备订阅时先保存 Events/Contexts、保留名称、流配额和 staging 队列，再发送
+subscribe。ACK 前到达的匹配事件只暂存，使用与活动队列相同的上限和累计计数；
+ACK 校验成功后按原顺序
 转为可读。失败不返回部分流。合法远端 error 响应终止本次调用并释放预留；
 如果失败前已经收到该订阅的事件，或成功 ACK 的 result 非法，远端订阅状态无法
 确认，转为连接级失败。写入开始后取消、超时或失联而没有可关联响应时同样
@@ -1348,7 +1376,9 @@ SDK 待消费队列。顺序是本连接中该流的接收顺序，不承诺不�
 在 Subscribe 返回成功后才发现同一准备阶段已经失败。
 
 事件以 `type=event`、精确 `method` 路由，不能用 command ID、payload 内字段或
-到达时刻推断所属命令。格式合法但未订阅的事件不交付，仍执行消息上限和 envelope
+到达时刻推断所属命令。contexts 筛选由 Appium 远端执行；SDK 原样保留已收到的
+顶层 Context 及其缺失/空值差异，不按 context 创建第二套流归属或从 params
+推导它。格式合法但未订阅的事件不交付，仍执行消息上限和 envelope
 校验；处于取消阶段的匹配事件也不交付。SDK 不承诺停止后的尾部事件可消费。
 异常/重复/从未分配的响应 ID、无法关联的 error、非法 envelope 和非法事件均
 终止整条连接，唤醒所有 pending 与流；不将其当作可忽略日志。明确的远端
@@ -1420,9 +1450,12 @@ DP-171 在 `ClientOptions` 增加独立 `BiDiLimits BiDiLimits`，不把计数�
 | `MaxEventsPerSubscription` | 64 | 每流精确事件名数 |
 | `MaxPendingCommands` | 32 | 写入等待与响应等待中的控制命令总数，含清理 |
 
-编码后的请求、每份响应、事件和订阅名称的保存也受单消息上限约束；不能在
-申请完无界输入副本后才检查限制。无空闲 pending 槽时在本地拒绝新的普通操作，
-不能建立额外无界等待队列；清理拿不到槽则关闭连接并报告清理失败。
+编码后的请求、每份响应、事件和订阅参数的保存也受单消息上限约束；Events 与
+Contexts 的合计 JSON 大小（含转义、数组与 envelope）在任何无界副本分配前
+有界检查；准入按两种固定 method 与最大 ID 长度预留 envelope，保证 subscribe
+与之后的 unsubscribe 都能在 `MaxMessageBytes` 内编码。Contexts 不新增独立
+计数配置，其总字节与项数受上述消息预算约束。无空闲 pending 槽时在本地拒绝
+新的普通操作，不能建立额外无界等待队列；清理拿不到槽则关闭连接并报告清理失败。
 停止流不等待消费者清空队列。单 reader、单 writer、每流至多一个有界清理任务
 和有限 pending 槽给出后台任务上限；已关闭流必须从 Session 注册表移除。
 
@@ -1475,12 +1508,17 @@ Fake Server 提供收到握手/命令、允许 ACK、发送事件、关闭连接
 binary frame、远端正常/异常关闭及不回应。所有实例用 `t.Cleanup` 回收连接与
 goroutine，仅使用合成事件和 ID。
 
+Fake Server 的常规事件发射路径必须模拟 Appium 按事件名保存 contexts、
+省略时使用 `[""]`、按 `includes(context)` 转发及按相同 contexts 取消的行为；
+不能只回显请求或无条件发送事件，否则无法复现“ACK 成功但 context 不匹配
+导致无事件”。畸形消息注入仍可走独立测试入口。
+
 DP-171 必须通过公共 Subscribe/Next/Close 与根 Session.Close 覆盖：
 
 1. Endpoint 的远端来源、缺失/false/非法值、path/query 保留、重定向拒绝、
    HTTP 配置复用；本地拒绝为零握手/零命令，CreateSession 不额外拨号。
 2. 首次并发订阅只拨号一次，Session 值副本共享连接，不同根 Session 隔离；
-   相交名称原子拒绝，ACK 前事件有界暂存，失败不交付部分流。
+   即使 contexts 不同，相交事件名也原子拒绝；ACK 前事件有界暂存，失败不交付部分流。
 3. ID 乱序关联、重复/未知/非法 ID、result 类型、远端 error、事件路由与
    Extra/Params 所有权；公共 API 无法触及的 ID 耗尽用内部聚焦测试覆盖。
 4. Next 单消费者与单次等待取消、寿命取消、正常关闭与稳定 Err/Done、清理
@@ -1491,6 +1529,14 @@ DP-171 必须通过公共 Subscribe/Next/Close 与根 Session.Close 覆盖：
    终止、远端 socket Close 不冒充 Session 丢失、取消不成功时其他流可观察失败。
 7. 无自动重连/重订阅/重试/Discovery/平台 stop，Observer 不收到业务事件；
    所有退出路径有本地任务结束确认，执行 `go test ./...` 和 `go test -race ./...`。
+8. 合成 `example.sample` 在 `NATIVE_APP` 发射时，nil Contexts 的订阅虽 ACK 成功
+   也不会收到该事件；显式 `["NATIVE_APP"]` 能收到。nil 与 `[""]` 都能接收
+   空 context，但 wire 字段的省略/存在不同；多个显式 context（含合成 Web
+   Context）精确转发，大小写差异不匹配，不触发自动 Context 发现。
+9. 非 nil 空 Contexts、重复值（包括重复 `""`）和非法 UTF-8 在握手/发送前拒绝；
+   Events 与 Contexts 合计消息上限检查覆盖等值/超一及 JSON 转义。修改原输入
+   不影响活动订阅和取消；显式关闭、寿命取消及溢出清理都验证 events/contexts
+   的值、顺序、nil 省略状态与 subscribe 对称，取消后不再转发匹配事件。
 
 协议测试完成前保持 `Accepted / None`。真实设备、Appium/Driver、macOS/Windows/
 Linux 组合须另写入兼容性文档，不能由 Fake Server 或上游源码推导 Verified。
@@ -1726,7 +1772,7 @@ internal/bidi       BiDi 协议实现
 | AD-033 | Accepted | `Session.ActiveAppID` 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 保留为空字符串无焦点快照；未知 Driver 本地拒绝，不从 App/bundle/package Capability 猜测，不公开进程信息或执行 fallback | 在保持平台标识含义和 Driver 探测差异的同时提供统一只读入口，并避免初始启动配置被误当成动态前台状态 |
 | AD-034 | Accepted | `Session.DeviceTime` 使用 Appium common Device Time GET route 的固定默认格式，将精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` 解码为保留数字 UTC 偏移的秒精度 `time.Time`；不猜测其他格式或时区名、不按 Driver 本地门禁，不缓存、重试、回退 Host 时间或提供时间/时区设置 | 交付可校验的时间点与偏移事实，同时显式保留 XCUITest Simulator 可来自 Host 时钟、真机与 Android 取值路径不同的兼容性边界 |
 | AD-035 | Accepted | DP-150 接受 `Element.BelongsTo(*Session) bool` 本地归属查询（ELM-009）；共享创建身份允许值复制且隔离同名远端 Session；关闭状态与归属分离，不公开 owner/token 或执行 hook | 为调用方及元素级平台能力提供受控的对象关系边界；详见 §2.2 |
-| AD-036 | Accepted | DP-170 确定同一根 Session 的单 BiDi 连接、精确事件名且互斥的多订阅、单消费者、有界队列与累计预算；固定 Appium 3 原生 events 取消协议，连接失败不恢复；WebSocket 依赖选用封装于内部的 coder/websocket v1.8.14 | §10.4 固定 API、状态、依赖取舍和 INF-006 验收；错误和命令契约分别维护于领域文档，DP-171 才实现 |
+| AD-036 | Accepted | DP-170 确定同一根 Session 的单 BiDi 连接、精确事件名且互斥的多订阅、单消费者、有界队列与累计预算；BiDiSubscription 显式表达 Events/Contexts，nil Contexts 省略且取消对称保存，context 不改变跨流事件名互斥；连接失败不恢复；WebSocket 依赖选用封装于内部的 coder/websocket v1.8.14 | §10.4 固定 API、状态、依赖取舍和 INF-006 验收；错误和命令契约分别维护于领域文档，DP-171 才实现 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-170` 已完成；下一项需显式选择）
+> 当前计划项：`DP-170` 评审修订（contexts P1 已修正，待复审）
 > 最后更新：2026-09-12
 
 ## Agent 执行约束
@@ -49,7 +49,7 @@
 | 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Done | DP-140 |
 | 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Done | — |
 | 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Done | DP-160 |
-| 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Done | DP-140 |
+| 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Queued | DP-140 |
 | 31 | `DP-171` BiDi 核心实现 | `BIDI-001..002`, `INF-006` | Queued | DP-170 |
 | 32 | `DP-172` Streaming Logs | `LOG-003` | Queued | DP-171 |
 | 33 | `DP-173` XCUITest System Monitor | `XCUI-006` | Queued | DP-140, DP-171 |
@@ -604,21 +604,29 @@ UIA-001 更新为 `Implemented` / `Protocol`；尚未执行真实设备或 Host 
 
 排除 Streaming Logs 和平台监控实现。
 
-已完成设计（2026-09-12），详见 `docs/design.md` §10.4 与 AD-036，固定线协议
+设计及本轮修订（2026-09-12）详见 `docs/design.md` §10.4 与 AD-036，固定线协议
 及错误/Delivery 分别记录于 `docs/command-semantics.md`、`docs/error-model.md`。
 
 - Endpoint 仅来自远端确认的 webSocketUrl；根 Session 共享单连接，按需建立，
   已建立连接失效后不在本 Session 内恢复，不改变 HTTP 删除确认语义。
-- 根包 Subscribe 返回 Session 所有的 EventStream，按精确事件名订阅、集合互斥、
-  每流单消费者；固定 ID/响应关联、ACK 前事件、context 和重复关闭规则。
+- 根包 Subscribe 接收 BiDiSubscription 的 Events/Contexts，返回 Session 所有
+  的 EventStream；事件名跨流互斥（包括不同 contexts）、每流单消费者，固定
+  ID/响应关联、ACK 前事件、context.Context 和重复关闭规则。
 - 固定单消息、队列、Session 总队列、累计预算及控制任务上限，溢出有可观察结果；
   选择内部封装 coder/websocket v1.8.14，并确定 Fake BiDi Server 的协议验收清单。
-- 核对 Appium 3.0.0 固定源码：取消使用 events，成功 result 为 object，不依赖
-  subscription token；默认 contexts 为 `[""]`，不承诺浏览器代理协议兼容。
+- 核对 Appium 3.0.0 固定源码：取消使用原 events/contexts，成功 result 为 object，
+  不依赖 subscription token；nil Contexts 省略并使用默认 `[""]`，显式非空列表
+  原值发送且精确匹配，不承诺浏览器代理协议兼容。
 
 BIDI-001、BIDI-002、INF-006 从 `Architecture` 调整为 `Accepted / None`。
 本项未实现 API、Fake Server 或引入运行时依赖，未新增真实兼容性记录；DP-171
 及 Streaming Logs/平台监控计划保持未启动。
+
+联合评审结论：同一提交中的 DP-161 为 `Approved / Done`；DP-170 因固定省略
+contexts 收到 `Changes Required`（P1）。本轮已修正订阅参数、输入保存与对称
+取消契约，并补充 Fake Server 按 context 精确转发、nil/显式空值区别、Native/
+Web Context 和本地参数拒绝的验收场景。DP-170 回到 `Queued` 表示修订待复审，
+不将本轮自查记为 Approved；DP-171 继续未启动，待本项复审完成后再显式选择。
 
 ### DP-171 BiDi 核心实现
 
