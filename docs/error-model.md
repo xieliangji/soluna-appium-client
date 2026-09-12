@@ -3,6 +3,20 @@
 公共命令错误使用根包 `Error` 表达，并通过 `ErrorCode` 区分失败事实。
 命令执行不会根据错误自动重试或恢复 Session。
 
+## UiAutomator2 Driver 门禁（DP-160）
+
+UIA-001 的内部门禁只使用 `Session.AutomationName()` 返回的远端确认值，
+精确匹配 `UiAutomator2`；原始创建 Capability、`platformName` 或调用方修改过的
+Capability 快照不参与判断。大小写或空白差异以及其他 Driver 均返回
+`CodeUnsupported` / `DeliveryNotSent`；nil、未初始化或创建失败后仅用于清理的
+Session 返回 `CodeInvalidArgument` / `DeliveryNotSent`。
+
+门禁错误保留调用方传入的 operation，HTTP StatusCode 为零；校验成功或失败都不
+发送远端请求、不产生 Observer 命令事件，不调用 Healthy 或 Runtime Discovery，
+也不规范化 Driver 值。门禁不判断 Session 是否已关闭；通过 Driver 校验后，实际
+命令由根包统一执行链在 Session 已关闭时返回 `CodeSessionLost` / `DeliveryNotSent`。
+DP-160 只交付内部校验，不新增 Android 公共平台函数或改变根包命令行为。
+
 ## Alert 错误映射
 
 标准 W3C Alert 远端错误映射如下：

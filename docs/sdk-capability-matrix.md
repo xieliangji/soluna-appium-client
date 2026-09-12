@@ -3,7 +3,7 @@
 > 文档状态：Active  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Appium 3.x  
-> 最后更新：2026-09-09
+> 最后更新：2026-09-12
 
 ## 1. 文档目的
 
@@ -246,11 +246,11 @@ XCUITest 能力必须同时说明最低 iOS、Driver/WDA、真机设备类型和
 
 ## 7. UiAutomator2 平台能力
 
-`uiautomator2` 目录当前只有占位文件，没有公开平台 API。平台能力应在完成通用能力后重新评审，不因为上游存在命令就批量复制。
+`uiautomator2` 已实现内部 Driver 门禁，仍没有公开平台 API。平台能力应在完成通用能力后重新评审，不因为上游存在命令就批量复制。
 
 | ID | 能力 / 目标 API | 公共入口 | 状态 | 机制 | Host/版本约束 | 验证 | 证据或下一步 |
 |---|---|---|---|---|---|---|---|
-| UIA-001 | UiAutomator2 Driver 门禁 | Internal / test infrastructure | Accepted | Session AutomationName | Host 通常可跨平台 | None | 与 XCUITest 门禁保持同一错误语义 |
+| UIA-001 | UiAutomator2 Driver 门禁 | Internal / test infrastructure | Implemented | 远端确认的 Session AutomationName 精确匹配；纯本地校验 | 不依赖 Host 工具；不保证远端命令可执行 | Protocol | `uiautomator2/driver.go`, `uiautomator2/driver_test.go`, `docs/error-model.md`；与 XCUITest 门禁保持同一错误语义，不新增公开平台 API |
 | UIA-002 | Android 物理键 | Platform function | Deferred | `mobile: pressKey` | Android-specific | None | 仅在真实调用场景确认后纳入 |
 | UIA-003 | Android 专有滚动/手势 | Platform function | Deferred | UiAutomator2 execute methods | W3C Actions 无稳定替代时才纳入 | None | 不批量复制 Gesture API |
 | UIA-004 | Android 系统面板/通知 | Platform function | Deferred | UiAutomator2 execute methods | Android-specific | None | 需明确高价值场景 |

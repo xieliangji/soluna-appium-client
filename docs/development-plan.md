@@ -1,8 +1,8 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-152` 已完成；下一项需显式选择）
-> 最后更新：2026-09-09
+> 当前计划项：暂无当前项（`DP-160` 已完成；下一项需显式选择）
+> 最后更新：2026-09-12
 
 ## Agent 执行约束
 
@@ -47,7 +47,7 @@
 | 25 | `DP-150` XCUITest Picker Wheel | `XCUI-003`, `ELM-009` | Done | DP-140 |
 | 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Done | DP-010, DP-140 |
 | 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Done | DP-140 |
-| 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Queued | — |
+| 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Done | — |
 | 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Queued | DP-160 |
 | 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Queued | DP-140 |
 | 31 | `DP-171` BiDi 核心实现 | `BIDI-001..002`, `INF-006` | Queued | DP-170 |
@@ -534,6 +534,16 @@ Delivery、响应上限和取消后不重放均有协议回归覆盖。
 - 不 normalize、不探测、不调用 Healthy。
 - mismatch 返回 `CodeUnsupported + DeliveryNotSent`。
 - 不新增 Android 公共平台函数。
+
+已在 `uiautomator2/driver.go` 实现私有门禁，复用根包 Session 的远端确认快照，
+仅接受精确 `UiAutomator2`；nil、未初始化与清理专用 Session 返回参数错误，
+关闭状态仍由根包实际命令执行链校验。门禁不发送请求、不产生 Observer 命令事件。
+
+协议测试通过公共 CreateSession 入口覆盖请求与响应 Driver 不一致、大小写和
+空白差异、Capability 快照修改、Session 值复制、清理失败及已关闭 Session 的
+执行链边界。`gofmt`、全量 `go test ./...` 和 `go test -race ./...` 已通过。
+UIA-001 更新为 `Implemented` / `Protocol`；尚未执行真实设备或 Host 组合验证，
+不标记为 `Verified`。未新增公共平台函数，不启动 DP-161。
 
 ### DP-161 UiAutomator2 能力复审
 
