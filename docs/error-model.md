@@ -3,6 +3,82 @@
 公共命令错误使用根包 `Error` 表达，并通过 `ErrorCode` 区分失败事实。
 命令执行不会根据错误自动重试或恢复 Session。
 
+## BiDi 错误与 Delivery（DP-170 已设计，DP-171 待实现）
+
+BIDI-001/002 沿用根包 `Error`，不公开 WebSocket 库错误类型。以下新增 ErrorCode
+只在 DP-171 随实现加入 Go API；当前 HTTP 错误行为不变。
+
+| 失败事实 | Code | 影响 |
+|---|---|---|
+| nil/零值对象、nil ctx、非法 events、名称重叠、并发第二个 Next | `CodeInvalidArgument` | 本地拒绝本次调用 |
+| BiDiLimits 负数、溢出或无法安全表示 | `CodeInvalidConfig` | Client 配置拒绝 |
+| 远端 webSocketUrl 缺失或 false | `CodeUnsupported` | 不拨号，不影响 HTTP Session |
+| 已存在的 webSocketUrl 非法 | `CodeResponseInvalid` | 在 Subscribe 本地拒绝，不影响已创建的 HTTP Session |
+| ctx 取消/截止 | `CodeCanceled` / `CodeDeadlineExceeded` | Cause 保留标准 context error |
+| 拨号、握手或 WebSocket I/O 失败 | `CodeTransportFailed` | 已建立的连接终止；根 Session 状态不据此改变 |
+| JSON/envelope/关联错误 | `CodeResponseInvalid` | 已建立的连接终止 |
+| 单条远端消息超限 | `CodeResponseTooLarge` | 已建立的连接终止，不保留大 Payload |
+| 已失效连接的新订阅；远端主动 Close/EOF | 新增 `CodeStreamClosed = "stream_closed"` | 不重连，不把 Close code 当作 Session 已丢失 |
+| 每流队列数量/字节或 Session 总队列溢出 | 新增 `CodeStreamOverflow = "stream_overflow"` | 每流或连接级终止，范围见设计 §10.4.6 |
+| 累计预算、订阅/名称/pending 配额或 command ID 耗尽；请求编码超过单消息上限 | 新增 `CodeStreamLimitReached = "stream_limit_reached"` | 本地准入拒绝或预算耗尽终止，范围见设计 §10.4 |
+| 根 Session 已确认关闭/失效 | `CodeSessionLost` | 停止全部 Session 流 |
+
+固定 operations 为 `bidi_connect`、`bidi_subscribe`、`bidi_unsubscribe` 和
+`bidi_next`。流最终错误使用 `bidi_next`；它的 Cause 可保留导致失败的有界
+命令/清理错误。配额和溢出错误使用静态资源类别描述，不嵌入 events、URL、
+params 或原始消息。正常流 Close 后 `Err()==nil`，Next 返回 `io.EOF`；远端
+自行关闭正在使用的连接不映射成正常 EOF。
+
+BiDi command 的 Delivery 按该命令自身事实计算：
+
+- `DeliveryNotSent`：参数、Endpoint、对象状态、配额检查失败；等待连接/writer
+  时取消且尚未进入该命令的 socket write。此前握手或其他命令的结果不能借用。
+- `DeliveryUnknown`：开始该消息 write 后、未收到可关联响应；即使 write 返回
+  成功，也不能证明远端执行。收到其他命令响应、事件或 WebSocket Close 不构成
+  本命令 ACK。超大/损坏消息无法安全解析 ID 时，各 pending 仍为 Unknown。
+- `DeliveryAcknowledged`：已从完整、合法的响应 envelope 关联到本命令 ID。
+  成功 result 的命令级类型错误仍是 Acknowledged；合法远端 error 同样如此。
+  重复/未知 ID 不改变已经完成命令的结果，也不确认其他 pending。
+
+握手作为独立 `bidi_connect` 观察：未尝试网络为 NotSent，已尝试但未收到 HTTP
+响应为 Unknown，收到握手 HTTP 响应为 Acknowledged，保留实际 StatusCode。
+握手 101 只确认连接，不确认后续 subscribe。Subscribe 因握手失败而返回的主
+错误用 `bidi_subscribe` / NotSent，Cause 保留 connect 的事实。BiDi command
+及流错误的 StatusCode 固定为零，不继承握手的 101。
+
+事件和 Next 不发送命令，其终止错误的 Delivery 固定为 `DeliveryNotSent`，
+这里只表示该读取没有远端投递，不能用来判断此前 subscribe/unsubscribe 的
+投递结果。原命令事实保留在 Cause。流寿命取消与独立清理同时失败时，以流
+寿命错误为主，用多错误链保留 unsubscribe 错误；`errors.Is` 仍能识别 context
+原因，`IsErrorCode` 能查到清理失败。显式 Close 的返回值也保留原 unsubscribe
+错误：实际取消失败时直接返回该命令 Error，Operation 为 `bidi_unsubscribe`，
+Delivery 按该命令计算；Err/Next 则用 `bidi_next` 包装并以 Cause 保留它。
+取消未失败时 Close 返回流最终结果。不能把 Next 的 Delivery 当作远端已清理
+证明。Done 关闭后 Err 固定，不因迟到帧改写。
+
+远端 error 的 `invalid argument`、`unknown command`、`unsupported operation`、
+`invalid session id` 等继续使用既有根包远端错误映射；未知错误保持
+`CodeCommandFailed` 与经过限额/脱敏的 RemoteCode。合法且可关联的
+`invalid session id` 是确认 Session 失效的事实，进入统一共享状态关闭边界；
+其他 error 不推断 Session 已失效。subscribe 的普通拒绝只影响本次调用，
+unsubscribe 拒绝则使连接的订阅状态不可靠，终止全部流。
+
+Observer 只报告 SDK 实际尝试的握手及固定控制命令，继续使用同步 Started/Finished
+模型；回调不能位于 socket reader 或 Session 状态锁内，后台清理也不另建
+Observer 事件队列。BiDi 命令的 RequestBytes/ResponseBytes 按完整 text message
+计量，StatusCode 为零；握手无 JSON 消息，两项字节数为零。ResponseBytes 不
+累计期间收到的业务事件。Next、事件、队列溢出和本地参数拒绝不生成命令观测
+事件。每条控制命令自身的 Error 与其 Finished Code/Delivery 必须一致，流的
+终止包装不改写这个 Cause；复合 Subscribe 中的 connect 失败由 connect 自己的
+Finished 报告，不伪造已发送 subscribe 的观测。
+
+远端 error 的 message/stacktrace/data/扩展字段在进入公共 Error 前复用
+`Limits.MaxRemoteErrorBytes`、严格解码及脱敏；整个远端消息仍先受 BiDi 单消息
+上限约束。默认诊断不输出 Endpoint query、认证信息、原始事件、close reason
+或库中含 URL/Payload 的错误文本。必要 Cause 也要在内部转换为有界、安全的
+原因，保留 context 等可判断的身份，不让底层字符串绕过脱敏。Session.Close
+继续报告 HTTP DELETE 自己的结果，不能用 BiDi teardown 错误覆盖其 Delivery。
+
 ## UiAutomator2 Driver 门禁（DP-160）
 
 UIA-001 的内部门禁只使用 `Session.AutomationName()` 返回的远端确认值，

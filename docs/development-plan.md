@@ -1,7 +1,7 @@
 # soluna-appium-client 开发计划
 
 > 文档状态：Active  
-> 当前计划项：暂无当前项（`DP-160` 已完成；下一项需显式选择）
+> 当前计划项：暂无当前项（`DP-170` 已完成；下一项需显式选择）
 > 最后更新：2026-09-12
 
 ## Agent 执行约束
@@ -48,8 +48,8 @@
 | 26 | `DP-151` XCUITest Alert label | `XCUI-004` | Done | DP-010, DP-140 |
 | 27 | `DP-152` XCUITest Simulated Location | `XCUI-005` | Done | DP-140 |
 | 28 | `DP-160` UiAutomator2 Driver 门禁 | `UIA-001` | Done | — |
-| 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Queued | DP-160 |
-| 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Queued | DP-140 |
+| 29 | `DP-161` UiAutomator2 能力复审 | `UIA-002..004` | Done | DP-160 |
+| 30 | `DP-170` BiDi 模型设计 | `BIDI-001..002`, `INF-006` | Done | DP-140 |
 | 31 | `DP-171` BiDi 核心实现 | `BIDI-001..002`, `INF-006` | Queued | DP-170 |
 | 32 | `DP-172` Streaming Logs | `LOG-003` | Queued | DP-171 |
 | 33 | `DP-173` XCUITest System Monitor | `XCUI-006` | Queued | DP-140, DP-171 |
@@ -556,6 +556,39 @@ UIA-001 更新为 `Implemented` / `Protocol`；尚未执行真实设备或 Host 
 
 同一任务不实现通过评审的能力。
 
+已完成评审（2026-09-12）。本次核对 UiAutomator2 Driver 8.2.0 的命令注册与
+文档，并结合仓库现有通用能力、业务场景记录和 Host 边界作出结论。当前没有
+明确的 Android 物理键、容器边界滚动或系统通知验证场景，因此没有能力满足
+“高价值场景已确认”的纳入条件；UIA-002、UIA-003、UIA-004 均继续保持
+`Deferred`，没有项目调整为 `Accepted`，也没有实现任何平台 API。
+
+评审结论：
+
+- **UIA-002 Android 物理键**：`mobile: pressKey` 可表达 Android keycode、
+  metastate、长按和输入源，能覆盖返回、Home、音量、确认键及系统对话框等
+  设备级场景；W3C Touch Actions 不能可靠表达这些物理键语义。命令经
+  Appium HTTP 执行，协议路径本身不绑定 SDK Host，但 keycode、Android API
+  level、设备厂商和 Driver/Server 版本会改变结果。由于没有当前调用方场景、
+  设备矩阵或最低版本证据，暂不接受。
+- **UIA-003 Android 专有滚动/手势**：`mobile: scrollGesture` 与
+  `mobile: flingGesture` 能以容器边界、方向、速度和百分比执行滚动，并可由
+  Driver 返回是否还能继续滚动；根包 `Swipe` 和 W3C Actions 适合坐标级手势，
+  不能可靠替代容器语义或边界结果。协议经 Appium HTTP 可跨 Host 使用，但
+  Android UI、UiAutomator2 Server 和设备版本仍决定行为。仓库没有需要这些
+  额外语义的场景，暂不接受；未来若纳入，应只选择明确的滚动/惯性能力，不能
+  批量复制全部 Gesture API。
+- **UIA-004 Android 系统面板/通知**：`mobile: openNotifications`、
+  `mobile: statusBar` 和 `mobile: getNotifications` 可用于通知抽屉、快捷设置
+  与通知断言；通用 WebDriver Actions 没有可靠的系统面板入口。命令依赖
+  Android 版本、OEM 系统面板、Appium Settings 通知访问权限及设备授权，虽不
+  直接绑定 SDK Host，却存在显著的设备条件差异。仓库没有系统通知业务场景或
+  权限验证记录，暂不接受。
+
+固定评审依据为 [UiAutomator2 Driver 8.2.0 execute method map](https://github.com/appium/appium-uiautomator2-driver/blob/v8.2.0/lib/execute-method-map.ts)
+及 [Driver command 文档](https://github.com/appium/appium-uiautomator2-driver/tree/v8.2.0/docs)。
+这些是上游协议观察，不是本项目真实设备或 Host 验证；DP-161 不新增兼容性
+记录，不启动后续 Android 能力实现。
+
 ## 第五阶段：BiDi 与持续事件
 
 ### DP-170 BiDi 模型设计
@@ -570,6 +603,22 @@ UIA-001 更新为 `Implemented` / `Protocol`；尚未执行真实设备或 Host 
 - 溢出结果、WebSocket 依赖和不自动重连边界。
 
 排除 Streaming Logs 和平台监控实现。
+
+已完成设计（2026-09-12），详见 `docs/design.md` §10.4 与 AD-036，固定线协议
+及错误/Delivery 分别记录于 `docs/command-semantics.md`、`docs/error-model.md`。
+
+- Endpoint 仅来自远端确认的 webSocketUrl；根 Session 共享单连接，按需建立，
+  已建立连接失效后不在本 Session 内恢复，不改变 HTTP 删除确认语义。
+- 根包 Subscribe 返回 Session 所有的 EventStream，按精确事件名订阅、集合互斥、
+  每流单消费者；固定 ID/响应关联、ACK 前事件、context 和重复关闭规则。
+- 固定单消息、队列、Session 总队列、累计预算及控制任务上限，溢出有可观察结果；
+  选择内部封装 coder/websocket v1.8.14，并确定 Fake BiDi Server 的协议验收清单。
+- 核对 Appium 3.0.0 固定源码：取消使用 events，成功 result 为 object，不依赖
+  subscription token；默认 contexts 为 `[""]`，不承诺浏览器代理协议兼容。
+
+BIDI-001、BIDI-002、INF-006 从 `Architecture` 调整为 `Accepted / None`。
+本项未实现 API、Fake Server 或引入运行时依赖，未新增真实兼容性记录；DP-171
+及 Streaming Logs/平台监控计划保持未启动。
 
 ### DP-171 BiDi 核心实现
 

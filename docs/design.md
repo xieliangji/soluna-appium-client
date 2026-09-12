@@ -3,7 +3,7 @@
 > 文档状态：Draft  
 > 适用阶段：v0.x 至首个稳定版本  
 > 技术基线：Go 1.26.5，Appium 3.x  
-> 最后更新：2026-09-07
+> 最后更新：2026-09-12
 
 ## 1. 文档职责
 
@@ -1203,6 +1203,9 @@ Streaming Logs、系统监控和网络监控通过 WebDriver BiDi 持续交付�
 
 自动重连可能造成事件丢失、重复订阅或跨越已经失效的 Session，因此由调用方决定是否建立新流。
 
+通用传输与订阅模型已由 DP-170 确定，见 §10.4；Streaming Logs 和平台事件的
+领域类型、启动/停止命令及兼容性仍由各自计划项设计。
+
 ### 10.3 Observer 边界
 
 `Observer` 只观察 Go Client 自己发送的命令生命周期。它不承载设备日志、App 日志、Driver 日志或 BiDi 业务事件。
@@ -1212,6 +1215,285 @@ Observer 回调是同步调用：`OnCommandStarted` 在传输开始前执行，
 但回调耗时会影响调用方看到的 API 延迟；回调 panic 按 Go 调用栈传播，客户端不
 提供异步队列、背压或 panic recovery。由于一个 `Client` 可以被多个 goroutine
 共享，Observer 实现必须自行保证并发安全，并保持回调快速、非阻塞。
+
+### 10.4 BiDi 模型（DP-170，已接受、尚未实现）
+
+本节完成 BIDI-001、BIDI-002 和 INF-006 的设计前置；公共声明是 DP-171 的目标，
+不表示当前版本已有这些 API。只接受连接和通用事件订阅，不开放任意 BiDi command、
+独立 Client、浏览器 Session 创建、Streaming Log helper 或平台监控。
+固定请求与响应见 `docs/command-semantics.md` 的 DP-170 章节，错误与投递事实见
+`docs/error-model.md` 的同名章节。
+
+#### 10.4.1 协议依据与适用范围
+
+以 Appium `appium@3.0.0`（commit
+`284da50353921343fa5a7f82574e64ce0c146db7`）的原生 BiDi 路径为首个协议基线：
+
+- [Appium 连接、消息与事件转发](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/appium/lib/bidi-commands.ts)；
+- [subscribe/unsubscribe 注册](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/base-driver/lib/protocol/bidi-commands.js)
+  与 [订阅状态实现](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/base-driver/lib/basedriver/commands/bidi.ts)；
+- [空返回值转为 object](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/base-driver/lib/basedriver/extension-core.ts)
+  与 [webSocketUrl 返回逻辑](https://github.com/appium/appium/blob/284da50353921343fa5a7f82574e64ce0c146db7/packages/appium/lib/appium.js)。
+
+该版本按事件名保存 Driver 级订阅，subscribe 会覆盖该事件的 contexts；默认
+contexts 为 `[""]`，不是浏览器所有 browsing context 的通配符。取消使用
+`events`，subscribe/unsubscribe 的成功 result 为 `{}`。事件没有 command ID，
+也没有可供 SDK 路由的 subscription ID。SDK 不假定存在现代浏览器 BiDi 的
+subscription token，不通过失败后切换参数形态兼容其他协议。
+
+首版只订阅完整事件名，省略 contexts，接收该 Appium 默认作用域的数据；不提供
+module 通配订阅、browsing-context/user-context 过滤或浏览器代理模式支持承诺。
+未来扩大协议范围必须另作设计。这里记录的是上游源码观察，不是设备/Host 验证。
+
+#### 10.4.2 Endpoint 与所有权
+
+调用方通过现有 W3C Capabilities 显式请求 `webSocketUrl: true`。SDK 不补写该
+Capability。第一次订阅时只读取创建响应中已保存的、远端确认的精确键
+`webSocketUrl`；不使用原始请求、不调用 Discovery/Healthy、不从 HTTP URL 或
+Session ID 拼接地址，也不支持调用方另传一个 WebSocket Endpoint。
+
+缺失或 boolean false 表示没有可用能力；其他已存在值必须为非空、有效 UTF-8 的
+绝对 `ws://` 或 `wss://` URL，含有效 host/port，无 userinfo、fragment 或控制字符。
+null、true、相对 URL、http(s) URL 或非法端口均为远端 Capability 格式错误。
+该检查只影响订阅，不改变 HTTP CreateSession 的成功条件。URL 的 path/query
+原样使用，不修补代理地址、广播地址或不可达 hostname，不跟随握手重定向。
+Endpoint 可以与 HTTP 地址不同；是否可达由本次拨号决定。
+
+根包持有握手配置，复用 Client 已配置的 HTTP Client 的 Transport、TLS、Proxy
+和 Cookie Jar；为握手创建浅副本并禁止重定向，不修改调用方实例。自定义
+RoundTripper 必须支持 WebSocket Upgrade 的可读写 response body。不复制 HTTP
+Endpoint 的 userinfo/Authorization 到另一地址，不新增 Header Provider；调用方
+自定义 Transport 的认证行为仍由调用方负责。URL/query、握手响应体和底层含 URL
+的错误不得未经脱敏进入 Error、Cause 或 Observer。
+
+一个根 Session 的共享 `sessionState` 至多拥有一个已建立的 BiDi 连接；Session
+值副本共享连接、ID 分配器和订阅表，不以字符串 Session ID 建立全局注册表。
+HTTP 创建完成不拨号。第一次 `Subscribe` 显式触发连接；并发首次调用通过有界、
+可取消的连接建立门禁串行竞争，只有取得门禁的调用执行一次拨号。跟随调用观察
+同一次尝试的结果，不在失败后隐式再次拨号。尚未成功建立连接时，后续新的显式
+调用可再次尝试；一旦建立过连接，其异常终止在本 Session 内不可恢复。
+
+连接在没有订阅时保持空闲，直到 Session 确认关闭或连接失败；没有自动重连、
+自动重新订阅、补读、去重、后台探活或闲置断开/重建。调用方可在仍健康的连接上
+显式创建新流；失效连接上的新订阅返回 `CodeStreamClosed`，不会拨号。若需要恢复，
+调用方自行决定是否创建新的根 Session。这一保守边界避免把 Appium 仍可能保留的
+Driver 级订阅误当成已清除；关闭 socket 不等于远端取消订阅或停止监控。
+
+#### 10.4.3 公共订阅与消费者
+
+目标声明均位于根包；`EventStream` 是 Session 所有的资源句柄，不能独立构造或
+连接，不形成新的公共 Client/Session 层级：
+
+```go
+func (s *Session) Subscribe(ctx context.Context, events []string) (*EventStream, error)
+
+type BiDiEvent struct {
+    Method  string
+    Context *string                    // 顶层 context：nil 表示缺失，指向 "" 表示显式空值
+    Params  json.RawMessage             // 必须为 object，交给后续领域 decoder
+    Extra   map[string]json.RawMessage  // 未知顶层字段，不含 type/method/context/params
+}
+
+func (s *EventStream) Next(ctx context.Context) (BiDiEvent, error)
+func (s *EventStream) Close(ctx context.Context) error
+func (s *EventStream) Done() <-chan struct{}
+func (s *EventStream) Err() error
+```
+
+`events` 必须非空，元素为有效 UTF-8、非空的完整 `module.event` 名称，点的两侧
+均非空；不 trim、改大小写、添加前缀、展开 module 或查询支持目录。不接受重复
+名称，不按 Driver 建立事件枚举。输入复制后才保留，保留调用方的发送顺序。
+nil/零值 Session 或流上的错误方法返回本地参数错误；零值流的 `Done` 返回已经
+关闭的 channel，`Err` 返回参数错误，不能返回永久阻塞的 channel。
+
+同一 Session 可有多个流，但它们的事件名集合必须互不相交；包含任一已经处于
+准备、活动或取消阶段的事件名时，整个新订阅在本地拒绝，不发送部分请求。
+这是 Appium 按事件名覆盖订阅的边界，不实现引用计数、共享远端订阅或隐式广播。
+调用方也不能同时用其他客户端修改该远端 Session 的 BiDi 订阅；SDK 无法探测
+这类外部竞争。不同事件名的流可以独立订阅和取消。
+取消成功后可由调用方显式再次订阅同名事件；由于远端没有订阅代次标识，SDK
+只能按新流生效后的接收顺序路由，不能区分远端迟到的旧采样与新采样。
+
+`Subscribe` 的 ctx 同时约束建立操作和返回流的寿命。握手、写入和等待 subscribe
+响应额外受 `CommandTimeout` 限制；成功后该命令超时计时器释放，不能用它限制
+整个流寿命。寿命取消通过回调/cancel handle 关联，不把调用方 Context 保存在
+长生命周期 struct 中；终止时移除关联。
+
+每个流一次只允许一个进行中的 `Next`；并发第二个读取立即返回
+`CodeInvalidArgument`，不会抢走事件或终止第一个读取。`Next` 的 ctx 只约束本次
+等待，不取消流；已取消时不出队。取消与出队按本地同步点线性化，出队先完成的
+事件可交付，否则保持排队。每次成功只返回一个独立拥有的事件，返回值的指针、
+map 和 RawMessage 不得引用 SDK 还会修改/复用的内存；调用方持有的数据不计入
+SDK 待消费队列。顺序是本连接中该流的接收顺序，不承诺不同流之间或与 HTTP
+命令之间的因果顺序，不增造时间戳、序号或日志结构。
+
+#### 10.4.4 command ID、响应与事件关联
+
+`internal/bidi` 只实现内部有界命令通道，根包仅使用已接受的固定
+`session.subscribe` / `session.unsubscribe`。ID 从 1 单调递增，使用整数且不超过
+`2^53-1`，在同一连接上不复用；耗尽时拒绝发送并终止连接，不回绕。
+写入前先注册 pending 项，单 writer 保证 JSON 消息不交错；唯一 reader 持续读取，
+按 ID 完成 pending 项，响应可以乱序。控制响应直接交给各自有界完成槽，不能
+排到事件消费者队列中；锁内不得执行网络 I/O、解码领域数据或 Observer 回调。
+
+准备订阅时先保留名称、流配额和 staging 队列，再发送 subscribe。ACK 前到达的
+匹配事件只暂存，使用与活动队列相同的上限和累计计数；ACK 校验成功后按原顺序
+转为可读。失败不返回部分流。合法远端 error 响应终止本次调用并释放预留；
+如果失败前已经收到该订阅的事件，或成功 ACK 的 result 非法，远端订阅状态无法
+确认，转为连接级失败。写入开始后取消、超时或失联而没有可关联响应时同样
+终止连接，不发送猜测性 unsubscribe、不保留无界 canceled-ID 墓碑。
+准备阶段的 staging 溢出/累计超限也遵循这一规则：subscribe 尚未写入则只释放
+本地预留，已开始写入但尚未确认成功则终止连接；只有确认成功的订阅才进入
+下面的一次性 unsubscribe 清理。ACK、取消与停止在共享状态内确定先后，不能
+在 Subscribe 返回成功后才发现同一准备阶段已经失败。
+
+事件以 `type=event`、精确 `method` 路由，不能用 command ID、payload 内字段或
+到达时刻推断所属命令。格式合法但未订阅的事件不交付，仍执行消息上限和 envelope
+校验；处于取消阶段的匹配事件也不交付。SDK 不承诺停止后的尾部事件可消费。
+异常/重复/从未分配的响应 ID、无法关联的 error、非法 envelope 和非法事件均
+终止整条连接，唤醒所有 pending 与流；不将其当作可忽略日志。明确的远端
+`invalid session id` 还进入根 Session 的确认失效路径。
+
+#### 10.4.5 取消、关闭与并发
+
+流有 `preparing -> active -> stopping -> closed` 状态；停止原因以第一个
+取得状态转换的调用为准。停止后不再出队，立即释放尚未交付的数据；只有已在
+停止同步点之前出队的事件可以完成返回。正常 Close 也是显式放弃剩余队列，
+不提供 drain 或隐式延长 Session 寿命。
+
+- `EventStream.Close(ctx)` 使用非 nil ctx 发起一次本地停止及远端取消；远端执行
+  受 ctx 与 `CommandTimeout` 较早者约束。即使 ctx 已结束，也先停止本地交付，
+  然后报告取消未发送及远端订阅未清理。重复/并发 Close 只等待同一次关闭，不
+  重发 unsubscribe；后来的 ctx 只控制自己的等待，不替换先前清理期限。
+- 流寿命 ctx 结束、队列溢出或累计预算耗尽，先停止本地交付，再用独立且有界的
+  `SessionCleanupTimeout` 尝试一次 unsubscribe。此清理是已明确拥有的资源释放，
+  不是命令重试；原寿命错误和清理错误都必须可观察。
+- unsubscribe 尚未完成时，名称仍被占用；成功 ACK 后才释放。取消的远端 error、
+  非法 ACK、发送失败或超时都使远端订阅状态不确定，关闭连接并终止其他流，不
+  声称该 Session 的 HTTP 通道也失效。若 Session 已确认关闭或连接已经失败，
+  跳过无法执行的 unsubscribe，直接结束本地资源。
+- `Done` 在本地 reader 关联、队列及该流清理任务都结束、最终错误已固定后关闭。
+  `Err` 在 Done 之前为 nil，之后返回稳定的终止结果；正常 Close 为 nil。
+  `Next` 在 stopping 阶段响应自己的 ctx 或等待 Done，随后返回终止错误，正常
+  关闭返回 `io.EOF`。Close 等待相同的终止过程；若实际 unsubscribe 失败，直接
+  返回该命令错误以保留投递事实，否则返回流终止结果。重复 Close 返回已保存
+  的关闭结果；其等待 ctx 提前结束时返回该等待错误，最终结果仍可通过
+  Done/Err 读取。
+
+根 `Session.Close` 保持 §3.2 的 HTTP 删除确认规则：开始删除不等于确认关闭。
+删除进行期间暂停新订阅提交，等待门禁的 ctx 可取消；现有流可以继续接收。
+DELETE 传输失败或结果未确认时，保留根 Session 未关闭状态，并重新允许在仍
+健康的连接上订阅；不主动重建断线连接。成功删除、既有 HTTP 确认失效路径
+（Close/Healthy）或 BiDi 命令确认 `invalid session id` 后，在共享状态边界
+一次性标记关闭、阻止新订阅并停止全部流、pending 和连接。不能在每个公共
+命令调用方分别增加关闭补丁，也不扩大既有 HTTP 命令的状态探测范围。
+
+Session 确认关闭后，尚未进入 stopping 的流以 `CodeSessionLost` 结束；已经
+记录的停止原因不被覆盖（例如远端 Close 帧先于 HTTP 删除响应到达）。不再发送 unsubscribe，
+也不发送 BiDi `session.end` 或平台 stop 命令。Session.Close 返回前完成 SDK
+本地 goroutine 退出和数据释放；本地 socket 释放失败不能覆盖 HTTP DELETE 的
+Error/Delivery。并发的 HTTP 命令仍按原执行链处理，SDK 不串行化业务命令。
+连接 reader 只能发布关闭信号，不等待自己退出；公共关闭路径在锁外完成任务
+汇合，避免 reader、pending 完成和 Session.Close 之间互相等待。
+
+远端 Close（包括 1000/1001）、EOF、网络断开或 WebSocket 协议错误只说明该
+连接结束，单凭这些事实不标记根 Session 已关闭。没有订阅的连接也必须持续
+读取以处理 Close/control frame；SDK 不以“正常关闭码”把尚未显式关闭的流
+伪装成正常 EOF。所有后台任务归共享 Session 状态所有，退出路径包括确认
+Session 关闭、连接失败和流取消；不能每条事件创建 goroutine。
+
+#### 10.4.6 资源与背压
+
+DP-171 在 `ClientOptions` 增加独立 `BiDiLimits BiDiLimits`，不把计数字段塞入
+现有“所有字段均为字节”的 `Limits`。以下字段均为 `int64`，零表示默认值，
+负数为配置错误；不支持零/负数表示无限。转为 int、求和和乘法必须检查溢出。
+配置只在实现时进入 Go API，本次不修改 ClientOptions 或 go.mod。
+
+| BiDiLimits 字段 | 默认值 | 计量与范围 |
+|---|---:|---|
+| `MaxMessageBytes` | 1 MiB | 单条收发 JSON 消息的 UTF-8 字节，跨所有 WebSocket 分片累计 |
+| `MaxQueuedEvents` | 256 | 每流待消费事件数量，含 ACK 前 staging |
+| `MaxQueuedBytes` | 8 MiB | 每流待消费完整 event envelope 字节，含 staging |
+| `MaxSessionQueuedBytes` | 32 MiB | 同一 Session 全部流的队列/staging 字节之和 |
+| `MaxStreamBytes` | 256 MiB | 每流整个寿命接收的匹配合法 event envelope 累计字节，消费不归零 |
+| `MaxSubscriptions` | 16 | 同时准备、活动和取消中的流总数 |
+| `MaxEventsPerSubscription` | 64 | 每流精确事件名数 |
+| `MaxPendingCommands` | 32 | 写入等待与响应等待中的控制命令总数，含清理 |
+
+编码后的请求、每份响应、事件和订阅名称的保存也受单消息上限约束；不能在
+申请完无界输入副本后才检查限制。无空闲 pending 槽时在本地拒绝新的普通操作，
+不能建立额外无界等待队列；清理拿不到槽则关闭连接并报告清理失败。
+停止流不等待消费者清空队列。单 reader、单 writer、每流至多一个有界清理任务
+和有限 pending 槽给出后台任务上限；已关闭流必须从 Session 注册表移除。
+
+库必须在聚合分片时执行 read limit，禁用压缩，不允许先完整分配大消息再检查。
+事件队列只保存一份有界 wire 数据，出队时解码/转移所有权；临时读写 buffer 和
+解码副本也受单消息限制。队列字节不是整个 Go heap 的精确上限：pending 的
+请求/响应、订阅元数据和并发出队解码各受槽数乘单消息上限约束，测试须检查这些
+独立界限，不能把 `MaxSessionQueuedBytes` 宣称为 RSS 上限。
+
+入队前原子检查事件数量、每流字节和 Session 总排队字节。超过每流限制时，
+终止该流并返回 `CodeStreamOverflow`，执行一次有界取消；其他流在取消成功时
+继续。超过 Session 总排队限制则终止连接及全部流，以免任意挑选牺牲的订阅。
+不阻塞 reader 等消费者，不丢最旧/最新事件后继续，不自动扩容或采样。
+
+累计值在暂存/入队前检查且按完整 envelope 计量，正好等于上限仍合法；下一条
+使其超限时不交付该条，终止该流并返回 `CodeStreamLimitReached`。重建一个新流
+只能由调用方显式发起，预算不会自动滚动。超大单消息、Session 总队列溢出和
+协议损坏均为连接级终止；错误结果不保留引发越界的原始消息。
+
+#### 10.4.7 WebSocket 依赖与内部实现边界
+
+选择纯 Go 的 `github.com/coder/websocket v1.8.14` 作为 DP-171 的 WebSocket
+依赖，封装在 `internal/bidi`，第三方类型不进入公共签名。
+[该版本 go.mod](https://github.com/coder/websocket/blob/v1.8.14/go.mod) 的 Go 基线为
+1.23、无其他模块依赖，满足本项目 Go 基线；其 context I/O、ReadLimit、HTTPClient
+和 CloseNow 支持本设计的取消、限额与关闭需求。这是 DP-170 对后续实现依赖的
+明确设计选择，本次不安装依赖，也不扩展到其他运行时库或 Host 工具。
+
+标准库没有 WebSocket 实现；不为维持零依赖自行实现握手、masking、分片和控制帧。
+相比需要自行用 deadline 管理取消的实现，选择该库减少内部取消适配。库负责
+WebSocket framing，SDK 仍负责严格 JSON、ID、Session 生命周期、错误脱敏和
+资源预算，不能直接把库的错误文本交给用户。
+
+Write 的 context 失败可能关闭底层连接，因此 SDK 在真正进入写入后统一执行
+连接级失败策略；`Next` 的 ctx 不能传入共享 socket reader。默认不发主动 ping，
+按协议处理远端 ping/pong。SDK teardown 使用立即关闭底层连接的能力解除阻塞，
+不等待无界 close handshake，不把库内部重定向或宽松 URL 接受规则作为 SDK
+行为。握手错误响应体应有界读取并关闭；不把握手 101 作为 BiDi 命令 ACK。
+
+#### 10.4.8 Fake BiDi Server 与验收
+
+INF-006 在 DP-171 实现 test-only Fake WebSocket/BiDi Server，与现有 HTTP
+contracttest 协作：HTTP 创建响应返回本测试实例的合成 Session Endpoint，
+真实 Upgrade 后按脚本记录/响应完整 JSON 消息。测试工具不进入生产依赖链，
+不公开通用 Raw Command 入口。测试所需的原始帧/畸形消息注入只在测试边界。
+
+Fake Server 提供收到握手/命令、允许 ACK、发送事件、关闭连接和退出确认的
+确定性同步点；使用 channel/barrier 和有界 context，不靠任意 sleep。支持延迟、
+乱序、重复/未知 ID、ACK 前事件、远端 error、分片、大消息、非法 UTF-8/JSON、
+binary frame、远端正常/异常关闭及不回应。所有实例用 `t.Cleanup` 回收连接与
+goroutine，仅使用合成事件和 ID。
+
+DP-171 必须通过公共 Subscribe/Next/Close 与根 Session.Close 覆盖：
+
+1. Endpoint 的远端来源、缺失/false/非法值、path/query 保留、重定向拒绝、
+   HTTP 配置复用；本地拒绝为零握手/零命令，CreateSession 不额外拨号。
+2. 首次并发订阅只拨号一次，Session 值副本共享连接，不同根 Session 隔离；
+   相交名称原子拒绝，ACK 前事件有界暂存，失败不交付部分流。
+3. ID 乱序关联、重复/未知/非法 ID、result 类型、远端 error、事件路由与
+   Extra/Params 所有权；公共 API 无法触及的 ID 耗尽用内部聚焦测试覆盖。
+4. Next 单消费者与单次等待取消、寿命取消、正常关闭与稳定 Err/Done、清理
+   失败；证明阻塞消费者不妨碍控制 ACK，已终止流不继续交付排队数据。
+5. 各上限的等值/超一边界、跨分片累计、请求编码前限制、pending/名称配额、
+   每流与 Session 总队列、消费后仍增长的累计预算；错误不携带大 Payload。
+6. Close 与订阅/取消/响应并发、DELETE 不确定后 HTTP 状态保留、明确失效统一
+   终止、远端 socket Close 不冒充 Session 丢失、取消不成功时其他流可观察失败。
+7. 无自动重连/重订阅/重试/Discovery/平台 stop，Observer 不收到业务事件；
+   所有退出路径有本地任务结束确认，执行 `go test ./...` 和 `go test -race ./...`。
+
+协议测试完成前保持 `Accepted / None`。真实设备、Appium/Driver、macOS/Windows/
+Linux 组合须另写入兼容性文档，不能由 Fake Server 或上游源码推导 Verified。
 
 ## 11. 显式等待
 
@@ -1398,7 +1680,6 @@ internal/bidi       BiDi 协议实现
 
 下列能力已经纳入 SDK 范围，但在实现前仍需要独立详细设计：
 
-- WebDriver BiDi 公共订阅接口及背压模型；
 - Streaming Log 与平台监控事件的公共/平台类型边界；
 - Runtime Discovery Catalog 的稳定 Go 类型。
 
@@ -1445,6 +1726,7 @@ internal/bidi       BiDi 协议实现
 | AD-033 | Accepted | `Session.ActiveAppID` 按远端确认的精确 `automationName` 映射 XCUITest `mobile: activeAppInfo` 的 `bundleId` 与 UiAutomator2 `mobile: getCurrentPackage` 的 package；Android `null` 保留为空字符串无焦点快照；未知 Driver 本地拒绝，不从 App/bundle/package Capability 猜测，不公开进程信息或执行 fallback | 在保持平台标识含义和 Driver 探测差异的同时提供统一只读入口，并避免初始启动配置被误当成动态前台状态 |
 | AD-034 | Accepted | `Session.DeviceTime` 使用 Appium common Device Time GET route 的固定默认格式，将精确 `YYYY-MM-DDTHH:mm:ss±HH:MM` 解码为保留数字 UTC 偏移的秒精度 `time.Time`；不猜测其他格式或时区名、不按 Driver 本地门禁，不缓存、重试、回退 Host 时间或提供时间/时区设置 | 交付可校验的时间点与偏移事实，同时显式保留 XCUITest Simulator 可来自 Host 时钟、真机与 Android 取值路径不同的兼容性边界 |
 | AD-035 | Accepted | DP-150 接受 `Element.BelongsTo(*Session) bool` 本地归属查询（ELM-009）；共享创建身份允许值复制且隔离同名远端 Session；关闭状态与归属分离，不公开 owner/token 或执行 hook | 为调用方及元素级平台能力提供受控的对象关系边界；详见 §2.2 |
+| AD-036 | Accepted | DP-170 确定同一根 Session 的单 BiDi 连接、精确事件名且互斥的多订阅、单消费者、有界队列与累计预算；固定 Appium 3 原生 events 取消协议，连接失败不恢复；WebSocket 依赖选用封装于内部的 coder/websocket v1.8.14 | §10.4 固定 API、状态、依赖取舍和 INF-006 验收；错误和命令契约分别维护于领域文档，DP-171 才实现 |
 
 当某项决策需要完整记录背景、候选方案、权衡和迁移影响时，应新增：
 

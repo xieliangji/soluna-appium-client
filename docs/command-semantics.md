@@ -2,6 +2,87 @@
 
 本文档记录进入 SDK 的公共命令请求、响应、副作用和失败语义。
 
+## BiDi 订阅（DP-170 已设计，DP-171 待实现）
+
+BIDI-001/002 的所有权、API、资源默认值和并发关闭流程以
+`docs/design.md` §10.4 为准。这里固定 Appium 3.0.0 原生 BiDi 的线协议，
+不表示 Streaming Logs、浏览器代理或平台监控已经实现。
+
+### 建立与请求
+
+调用方在 CreateSession 请求中显式提供 `webSocketUrl: true`；HTTP 创建不自动
+连接。`Session.Subscribe(ctx, events)` 只使用已保存的远端返回 URL，经根包
+管理的 WebSocket 握手进入同一个 Session。不发送 BiDi `session.new`、
+`session.end`、status 探测或 Runtime Discovery。
+
+每条命令是一个 UTF-8 WebSocket text message，不使用 HTTP W3C `value`
+envelope，不携带第二份 Session ID：
+
+| 操作 | `method` | `params` | 成功 `result` | Error/Observer operation |
+|---|---|---|---|---|
+| Subscribe | `session.subscribe` | `{"events":["example.sample"]}` | object；基线为 `{}` | `bidi_subscribe` |
+| 流关闭或有界清理 | `session.unsubscribe` | 原订阅的同一 events 数组 | object；基线为 `{}` | `bidi_unsubscribe` |
+
+外层固定为 `{"id":1,"method":"session.subscribe","params":{"events":["example.sample"]}}`。
+`example.sample` 仅为合成协议示例，不声明 Driver 支持该事件。ID 由连接分配，
+不接受调用方指定。events 的内容与顺序原样发送，不发 contexts；Appium 基线
+默认 contexts 为 `[""]`，仅表达其默认事件作用域，不能解释为浏览器全部上下文。
+SDK 不发 `subscriptions` token 数组，不根据返回字段改变取消协议。
+
+订阅名称集合在本地必须非空、无重复，并与本 Session 其他准备/活动/取消中的
+流互不相交；每项为有效 UTF-8 且点两侧非空的完整 `module.event`。其他命名
+语义交给远端，不维护事件白名单。参数/上限/已关闭状态的本地拒绝不发握手或
+命令；首次拨号成功才发送 subscribe。请求和控制响应均受独立 BiDi 消息上限。
+
+### 响应与事件解码
+
+所有消息必须是单个合法 JSON object；拒绝 binary message、无效 UTF-8、未配对
+surrogate、尾随 JSON 值及重复顶层键。已知字段区分缺失、null 与零值，不转换
+数字字符串或大小写。未知顶层字段可保留，但不能替代必需字段。
+
+- 成功：`{"type":"success","id":1,"result":{}}`。`type` 必须精确，id 为
+  `[1, 2^53-1]` 的 JSON 整数字面量且匹配 pending；result 必须存在且为 object，
+  不接受缺失/null/数组。result 的未知字段不影响固定命令语义，不生成订阅
+  token。此 result 可扩展规则不构成浏览器协议兼容承诺。
+- 失败：`{"type":"error","id":1,"error":"invalid argument","message":"synthetic failure"}`。
+  error 是非空 string，message 是 string（可空）；可选 stacktrace 是 string。
+  id 必须匹配 pending。缺失/null/不合法/未知 id 是连接级协议错误，不能把它
+  任意关联到最后一条命令；SDK 从不发送无 ID 的命令。data 和未知字段仅在
+  经过远端错误限额与脱敏后进入诊断。
+- 事件：`{"type":"event","method":"example.sample","context":"","params":{"value":1}}`。
+  method 必须为完整非空事件名，params 必须为 object；context 可缺失，存在时
+  必须为 string（包括空字符串）。顶层不得含 id、result 或 error，响应也不得
+  混入 event method/params 字段；success/error 的互斥字段不能同时出现。
+  未知顶层字段进入独立 Extra，params 原样保留为合法 JSON object 的
+  RawMessage；不抽取其中的 context、时间戳、级别或其他领域字段。
+
+唯一 reader 按完整消息顺序验证与分发。响应按 id 关联，事件按精确 method
+路由；不从 payload 推断订阅 ID。ACK 前匹配事件计入该流 staging、队列和
+累计上限，成功确认后才可交付。无匹配流或处于取消阶段的合法事件不交付，
+但仍受单消息上限和 envelope 校验；非法事件影响整个连接。
+
+### 副作用、取消与交付
+
+subscribe 成功只表示远端接受订阅，不保证能力产生事件、第一帧时间或未来连续
+交付。unsubscribe 成功只表示接受取消，不证明设备日志/监控采集本身已停止；
+typed monitor 的启动/停止属于后续独立能力。SDK 不自动启动或停止采集。
+
+每个事件最多向所属流的一个消费者交付一次；没有持久化、重放、去重或 exactly-once
+保证。不同流不定义统一消费顺序。主动 Close、寿命取消、溢出或 Session 确认
+关闭停止交付并释放尚未出队的数据；不通过静默丢弃后继续运行来掩盖溢出。
+正常流关闭的后续 Next 返回 `io.EOF`；失败终止返回稳定的流错误。
+
+发送开始后的 subscribe 取消/超时而无 ACK、ACK 格式错误，或失败前已有匹配
+事件，都可能留下未知远端订阅状态，SDK 终止连接且不猜测性补发取消。合法
+远端 error 且没有提前事件时，本次订阅失败，其他流可继续。
+unsubscribe 失败或结果不确定同样终止连接。socket 断开不等于远端订阅清理，
+也不等于 Session 已删除；只有根 Session 的既有删除/明确失效规则改变该状态。
+
+流 ctx 结束/溢出后的清理只尝试一次固定 unsubscribe，采用设计明确允许的
+独立有界期限。多次 Close 不重发，Next 单次等待取消不执行 unsubscribe。
+根 Session 确认关闭后不再取消订阅，只释放连接和本地资源。所有失败保留
+`docs/error-model.md` 定义的投递事实，不自动重连、重试或 fallback。
+
 ## 标准 Alert
 
 所有命令均复用根包 `Client` 的统一 HTTP 执行链。路径中的 Session ID
